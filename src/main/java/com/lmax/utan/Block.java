@@ -3,17 +3,20 @@ package com.lmax.utan;
 import org.agrona.BitUtil;
 import org.agrona.concurrent.AtomicBuffer;
 
+import static java.lang.Long.*;
+import static java.nio.ByteOrder.BIG_ENDIAN;
+
 public class Block
 {
-    public static final int INITIAL_LENGTH = 32;
-    public static final int FIRST_TIMESTAMP_OFFSET = 4;
-    public static final int FIRST_VALUE_OFFSET = 12;
+    private static final int INITIAL_LENGTH = 32;
+    private static final int FIRST_TIMESTAMP_OFFSET = 4;
+    private static final int FIRST_VALUE_OFFSET = 12;
 
     private final AtomicBuffer buffer;
     private long tMinusOne = 0;
     private long tMinusTwo = 0;
     private double lastValue = 0.0;
-
+    private long lastXorValue = 0;
 
     public Block(AtomicBuffer buffer)
     {
@@ -28,20 +31,21 @@ public class Block
 
     public void append(long timestamp, double val)
     {
-        if (lenghtInBits() == INITIAL_LENGTH)
+        int bitOffset = lengthInBits();
+        if (bitOffset == INITIAL_LENGTH)
         {
             appendInitial(timestamp, val);
         }
         else
         {
-            appendCompressed(timestamp, val);
+            appendCompressed(bitOffset, timestamp, val);
         }
     }
 
     private void appendInitial(long timestamp, double val)
     {
-        buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp);
-        buffer.putDouble(FIRST_VALUE_OFFSET, val);
+        buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BIG_ENDIAN);
+        buffer.putDouble(FIRST_VALUE_OFFSET, val, BIG_ENDIAN);
         setLength(160);
 
         tMinusOne = timestamp;
@@ -49,89 +53,135 @@ public class Block
         lastValue = val;
     }
 
-    private void appendCompressed(long timestamp, double val)
+    private void appendCompressed(int bitOffset, long timestamp, double val)
     {
-        int length = lenghtInBits();
-
         long d = (timestamp - tMinusOne) - (tMinusOne - tMinusTwo);
 
         final int timestampBitsAdded;
         if (d == 0)
         {
-            timestampBitsAdded = appendZeroTimestampDelta(length);
+            timestampBitsAdded = appendZeroTimestampDelta();
         }
-        else if (-63 <= d && d <= 64)
+        else if (-64 <= d && d <= 63)
         {
-            timestampBitsAdded = appendTimestampDelta(0b10, d);
+            timestampBitsAdded = appendTimestampDelta(bitOffset, 7, 0b10, d);
         }
-        else if (-255 <= d && d <= 256)
+        else if (-256 <= d && d <= 255)
         {
-            timestampBitsAdded = appendTimestampDelta(0b110, d);
+            timestampBitsAdded = appendTimestampDelta(bitOffset, 9, 0b110, d);
         }
-        else if (-2047 <= d && d <= 2048)
+        else if (-2048 <= d && d <= 2047)
         {
-            timestampBitsAdded = appendTimestampDelta(0b1110, d);
+            timestampBitsAdded = appendTimestampDelta(bitOffset, 12, 0b1110, d);
         }
         else
         {
-            timestampBitsAdded = appendTimestampDelta(0b11110, d);
+            timestampBitsAdded = appendTimestampDelta(bitOffset, 32, 0b11110, d);
         }
 
         long valueAsLong = Double.doubleToLongBits(val);
-        long lastValueAsLong = Double.doubleToLongBits(val);
+        long lastValueAsLong = Double.doubleToLongBits(lastValue);
         long xorValue = valueAsLong ^ lastValueAsLong;
 
         final int valueBitsAdded;
         if (xorValue == 0)
         {
-            valueBitsAdded = appendZeroValueXor();
+            valueBitsAdded = appendZeroValueXor(bitOffset + timestampBitsAdded);
         }
         else
         {
-            valueBitsAdded = appendValueXor(xorValue);
+            valueBitsAdded = appendValueXor(bitOffset + timestampBitsAdded, xorValue, lastXorValue);
         }
 
-        int newLength = length + timestampBitsAdded + valueBitsAdded;
+        int newLength = bitOffset + timestampBitsAdded + valueBitsAdded;
+
+        tMinusTwo = tMinusOne;
+        tMinusOne = timestamp;
+        lastValue = val;
+        lastXorValue = xorValue;
 
         setLength(newLength);
     }
 
-    private int appendZeroTimestampDelta(int bitPosition)
+    private int appendZeroTimestampDelta()
     {
         return 1;
     }
 
-    private int appendTimestampDelta(int markerBits, long valueBits)
+    private int writeBits(int bitOffset, int bitLength, long value)
     {
-        return 0;
+        int byteOffset = bitOffset / 8;
+        int bitSubIndex = bitOffset & 7;
+        long shift = (64 - bitSubIndex) - bitLength;
+        long bits = buffer.getLong(byteOffset, BIG_ENDIAN);
+        buffer.putLong(byteOffset, bits | (value << shift), BIG_ENDIAN);
+
+        return bitLength;
     }
 
-    private int appendZeroValueXor()
+    private int appendTimestampDelta(int bitOffset, int numBits, long markerBits, long timestampDelta)
+    {
+        int markerBitLength = numberOfTrailingZeros(highestOneBit(markerBits) << 1);
+
+        writeBits(bitOffset, markerBitLength, markerBits);
+        writeBits(bitOffset + markerBitLength, numBits, compressBits(timestampDelta, numBits));
+
+        return markerBitLength + numBits;
+    }
+
+    private int appendZeroValueXor(int i)
     {
         return 1;
     }
 
-    private int appendValueXor(long xorValue)
+    private int appendValueXor(int bitOffset, long xorValue, long previousXorValue)
     {
-        return 0;
+        int leadingZeros = Long.numberOfLeadingZeros(xorValue);
+        int trailingZeros = Long.numberOfTrailingZeros(xorValue);
+        int prevLeadingZeros = Long.numberOfLeadingZeros(previousXorValue);
+        int prevTrailingZeros = Long.numberOfTrailingZeros(previousXorValue);
+
+        int length = 0;
+
+        if (leadingZeros >= prevLeadingZeros && trailingZeros >= prevTrailingZeros)
+        {
+            length += writeBits(bitOffset, 2, 0b10);
+            length += writeBits(bitOffset + 2, 64 - (prevLeadingZeros + prevTrailingZeros), xorValue >>> trailingZeros);
+        }
+        else
+        {
+            int relevantLength = 64 - (leadingZeros + trailingZeros);
+
+            length += writeBits(bitOffset,                          2, 0b11);
+            length += writeBits(bitOffset + 2,                      5, leadingZeros);
+            length += writeBits(bitOffset + 2 + 5,                  6, relevantLength);
+            length += writeBits(bitOffset + 2 + 5 + 6, relevantLength, xorValue >>> trailingZeros);
+
+            System.out.printf(
+                "Value Xor - bitOffset: %d, marker: 0b11, leadingZeros: %d, length: %d, xorValue: %s, shiftedXor: %s%n",
+                bitOffset, leadingZeros, relevantLength, toBinaryString(xorValue), toBinaryString(xorValue >>> trailingZeros));
+        }
+
+        return length;
     }
 
-    public int lenghtInBits()
+    public int lengthInBits()
     {
         return buffer.getIntVolatile(0);
     }
 
     public int foreach(ValueConsumer consumer)
     {
-        int lengthInBits = lenghtInBits();
+        int lengthInBits = lengthInBits();
 
         if (lengthInBits <= INITIAL_LENGTH)
         {
             return 0;
         }
 
-        long timestamp = buffer.getLong(FIRST_TIMESTAMP_OFFSET);
-        double value = buffer.getDouble(FIRST_VALUE_OFFSET);
+        long timestamp = buffer.getLong(FIRST_TIMESTAMP_OFFSET, BIG_ENDIAN);
+        double value = buffer.getDouble(FIRST_VALUE_OFFSET, BIG_ENDIAN);
+        long lastXorValue = 0;
 
         consumer.accept(timestamp, value);
 
@@ -143,24 +193,86 @@ public class Block
         int count = 1;
         while (bitOffset < lengthInBits)
         {
-            if (0 == getNextBits(bitOffset, 1))
+            final long delta;
+            if (0 == readBits(bitOffset, 1))
             {
-                timestamp =  0 + (tMinusTwo - tMinusOne) + tMinusOne;
+                bitOffset += 1;
+                delta = 0;
+            }
+            else if (0b10 == readBits(bitOffset, 2))
+            {
+                bitOffset += 2;
+                delta = decompressBits(readBits(bitOffset, 7), 7);
+                bitOffset += 7;
+            }
+            else if (0b110 == readBits(bitOffset, 3))
+            {
+                bitOffset += 3;
+                delta = decompressBits(readBits(bitOffset, 9), 9);
+                bitOffset += 9;
+            }
+            else if (0b1110 == readBits(bitOffset, 4))
+            {
+                bitOffset += 4;
+                delta = decompressBits(readBits(bitOffset, 12), 12);
+                bitOffset += 12;
+            }
+            else if (0b1111 == readBits(bitOffset, 4))
+            {
+                bitOffset += 4;
+                delta = decompressBits(readBits(bitOffset, 32), 32);
+                bitOffset += 32;
+            }
+            else
+            {
+                throw new IllegalStateException("Data Corrupt");
+            }
+
+            timestamp =  delta + (tMinusOne - tMinusTwo) + tMinusOne;
+            tMinusTwo = tMinusOne;
+            tMinusOne = timestamp;
+
+            if (0 == readBits(bitOffset, 1))
+            {
                 bitOffset += 1;
             }
             else
             {
-                throw new RuntimeException("TDD");
-            }
+                long prefixBits = readBits(bitOffset, 2);
+                bitOffset += 2;
 
+                if (0b10 == prefixBits)
+                {
+                    int leadingZeros = Long.numberOfLeadingZeros(lastXorValue);
+                    int trailingZeros = Long.numberOfTrailingZeros(lastXorValue);
+                    int validBits = 64 - (leadingZeros + trailingZeros);
+                    long xorValue = readBits(bitOffset, validBits) << trailingZeros;
 
-            if (0 == getNextBits(bitOffset, 1))
-            {
-                bitOffset += 1;
-            }
-            else
-            {
-                throw new RuntimeException("TDD");
+                    value = Double.longBitsToDouble(xorValue);
+
+                    lastXorValue = xorValue;
+
+                    bitOffset += validBits;
+                }
+                else if (0b11 == prefixBits)
+                {
+                    int leadingZeros = readBits(bitOffset, 5);
+                    int length = readBits(bitOffset + 5, 6);
+                    long shift = 64 - (leadingZeros + length);
+                    long xorValue = readBitsLong(bitOffset + 5 + 6, length) << shift;
+
+                    value = Double.longBitsToDouble(xorValue ^ Double.doubleToLongBits(value));
+
+                    lastXorValue = xorValue;
+
+                    bitOffset += 5;
+                    bitOffset += 6;
+                    bitOffset += length;
+                }
+                else
+                {
+                    throw new IllegalStateException("Data Corrupt");
+                }
             }
 
             consumer.accept(timestamp, value);
@@ -170,22 +282,38 @@ public class Block
         return count;
     }
 
-    private int getNextBits(int offset, int numBits)
+    private int readBits(int offset, int numBits)
+    {
+        return (int) (readBitsLong(offset, numBits) & 0xFFFFFFFFL);
+    }
+
+    private long readBitsLong(int offset, int numBits)
     {
         int byteOffset = offset / 8;
-        int bitSubIndex = offset & 8;
+        int bitSubIndex = offset & 7;
 
-        long bits = buffer.getLong(byteOffset);
+        long bits = buffer.getLong(byteOffset, BIG_ENDIAN);
         long mask = (1 << numBits) - 1;
         long shift = (64 - bitSubIndex) - numBits;
         long shiftedMask = mask << shift;
-        long bitsOfInterest = (bits & shiftedMask) >>> shift;
 
-        return (int) (bitsOfInterest & 0xFFFFFFFFL);
+        return (bits & shiftedMask) >>> shift;
     }
 
     public interface ValueConsumer
     {
         void accept(long timestamp, double value);
+    }
+
+    static long compressBits(long value, int numBits)
+    {
+        return value & ((1 << (numBits - 1)) - 1) | ((value >>> 63) << (numBits - 1));
+    }
+
+    static long decompressBits(long value, int numBits)
+    {
+        long sign = value >>> numBits - 1;
+        long mask = (1 << (numBits - 1)) - 1;
+        return value & mask |-sign & ~mask;
     }
 }
