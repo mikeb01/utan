@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import static com.lmax.utan.Block.compressBits;
 import static com.lmax.utan.Block.decompressBits;
@@ -12,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
 {
-    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[1024]);
+    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[1 << 16]);
     private final Block b = new Block(buffer);
 
     @Test
@@ -82,8 +83,6 @@ public class BlockTest
         b.append(timestamp + 1000, val + 1);
         b.append(timestamp + 2000, val - 1);
 
-//        assertThat(b.lengthInBits()).isEqualTo((20 * 8) + 2);
-
         final List<Long> timestamps = new ArrayList<>();
         final List<Double> values = new ArrayList<>();
 
@@ -123,6 +122,38 @@ public class BlockTest
     {
         assertThat(Long.numberOfLeadingZeros(0)).isEqualTo(64);
         assertThat(Long.numberOfTrailingZeros(0)).isEqualTo(64);
+    }
 
+    @Test
+    public void shouldInsert1000DataPoints() throws Exception
+    {
+        int count = 1000;
+        long[] timestamps = new long[count];
+        double[] values = new double[count];
+
+        Random r = new Random(7);
+
+        long lastTimestamp = r.nextLong();
+        double lastValue = r.nextDouble() * 100;
+
+        for (int i = 0; i < count; i++)
+        {
+            timestamps[i] = lastTimestamp + r.nextInt(21) - 10;
+            values[i] = lastValue + (10 * (r.nextDouble() - 0.5));
+
+            lastTimestamp = timestamps[i];
+            lastValue = values[i];
+
+            b.append(lastTimestamp, lastValue);
+        }
+
+        int index[] = { 0 };
+
+        b.foreach((t, v) -> {
+            assertThat(t).as("Index: %d", index[0]).isEqualTo(timestamps[index[0]]);
+            assertThat(v).as("Index: %d", index[0]).isEqualTo(values[index[0]]);
+
+            index[0]++;
+        });
     }
 }

@@ -3,7 +3,8 @@ package com.lmax.utan;
 import org.agrona.BitUtil;
 import org.agrona.concurrent.AtomicBuffer;
 
-import static java.lang.Long.*;
+import static java.lang.Long.highestOneBit;
+import static java.lang.Long.numberOfTrailingZeros;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class Block
@@ -146,7 +147,7 @@ public class Block
         if (leadingZeros >= prevLeadingZeros && trailingZeros >= prevTrailingZeros)
         {
             length += writeBits(bitOffset, 2, 0b10);
-            length += writeBits(bitOffset + 2, 64 - (prevLeadingZeros + prevTrailingZeros), xorValue >>> trailingZeros);
+            length += writeBits(bitOffset + 2, 64 - (prevLeadingZeros + prevTrailingZeros), xorValue >>> prevTrailingZeros);
         }
         else
         {
@@ -156,10 +157,6 @@ public class Block
             length += writeBits(bitOffset + 2,                      5, leadingZeros);
             length += writeBits(bitOffset + 2 + 5,                  6, relevantLength);
             length += writeBits(bitOffset + 2 + 5 + 6, relevantLength, xorValue >>> trailingZeros);
-
-            System.out.printf(
-                "Value Xor - bitOffset: %d, marker: 0b11, leadingZeros: %d, length: %d, xorValue: %s, shiftedXor: %s%n",
-                bitOffset, leadingZeros, relevantLength, toBinaryString(xorValue), toBinaryString(xorValue >>> trailingZeros));
         }
 
         return length;
@@ -246,9 +243,9 @@ public class Block
                     int leadingZeros = Long.numberOfLeadingZeros(lastXorValue);
                     int trailingZeros = Long.numberOfTrailingZeros(lastXorValue);
                     int validBits = 64 - (leadingZeros + trailingZeros);
-                    long xorValue = readBits(bitOffset, validBits) << trailingZeros;
+                    long xorValue = readBitsLong(bitOffset, validBits) << trailingZeros;
 
-                    value = Double.longBitsToDouble(xorValue);
+                    value = Double.longBitsToDouble(xorValue ^ Double.doubleToLongBits(value));
 
                     lastXorValue = xorValue;
 
@@ -293,7 +290,7 @@ public class Block
         int bitSubIndex = offset & 7;
 
         long bits = buffer.getLong(byteOffset, BIG_ENDIAN);
-        long mask = (1 << numBits) - 1;
+        long mask = (1L << numBits) - 1;
         long shift = (64 - bitSubIndex) - numBits;
         long shiftedMask = mask << shift;
 
