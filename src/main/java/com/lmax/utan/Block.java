@@ -279,15 +279,15 @@ public class Block
         return count;
     }
 
-    private int readBits(int offset, int numBits)
+    private int readBits(int bitOffset, int numBits)
     {
-        return (int) (readBitsLong(offset, numBits) & 0xFFFFFFFFL);
+        return (int) (readBitsLong(bitOffset, numBits) & 0xFFFFFFFFL);
     }
 
-    private long readBitsLong(int offset, int numBits)
+    private long readBitsLong(int bitOffset, int numBits)
     {
-        int byteOffset = offset / 8;
-        int bitSubIndex = offset & 7;
+        int byteOffset = bitOffset / 8;
+        int bitSubIndex = bitOffset & 7;
 
         long bits = buffer.getLong(byteOffset, BIG_ENDIAN);
         long mask = (1L << numBits) - 1;
