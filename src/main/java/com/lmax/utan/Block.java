@@ -111,11 +111,14 @@ public class Block
 
     private int writeBits(int bitOffset, int bitLength, long value)
     {
-        int byteOffset = bitOffset / 8;
-        int bitSubIndex = bitOffset & 7;
-        long shift = (64 - bitSubIndex) - bitLength;
-        long bits = buffer.getLong(byteOffset, BIG_ENDIAN);
-        buffer.putLong(byteOffset, bits | (value << shift), BIG_ENDIAN);
+        int longOffset = bitOffset / 64;
+        int bitSubIndex = bitOffset & 63;
+        long valueHighPart = value >>> bitSubIndex;
+        long valueLowPart = value << (64 - bitSubIndex);
+
+        long bits = buffer.getLong(longOffset, BIG_ENDIAN);
+        buffer.putLong(longOffset, bits | valueHighPart, BIG_ENDIAN);
+        buffer.putLong(longOffset + 8, valueLowPart, BIG_ENDIAN);
 
         return bitLength;
     }

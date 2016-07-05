@@ -144,16 +144,40 @@ public class BlockTest
             lastTimestamp = timestamps[i];
             lastValue = values[i];
 
-            b.append(lastTimestamp, lastValue);
+        }
+
+        assertWriteAndReadValues(timestamps, values);
+    }
+
+    @Test
+    public void shouldHandleLongXorValues() throws Exception
+    {
+        long l = 0b10000000_00000000_00000000_00000000_00000000_00000000_00000000_00000001L;
+
+        double d = Double.longBitsToDouble(l);
+
+        long[] timestamps = { 1000, 2000 };
+        double[] values = { 0, d };
+
+        assertWriteAndReadValues(timestamps, values);
+    }
+
+    private void assertWriteAndReadValues(long[] timestamps, double[] values)
+    {
+        for (int i = 0; i < timestamps.length; i++)
+        {
+            b.append(timestamps[i], values[i]);
         }
 
         int index[] = { 0 };
 
         b.foreach((t, v) -> {
-            assertThat(t).as("Index: %d", index[0]).isEqualTo(timestamps[index[0]]);
-            assertThat(v).as("Index: %d", index[0]).isEqualTo(values[index[0]]);
+            assertThat(t).as("Timestamp index: %d", index[0]).isEqualTo(timestamps[index[0]]);
+            assertThat(v).as("Value index: %d", index[0]).isEqualTo(values[index[0]]);
 
             index[0]++;
         });
+
+        assertThat(index[0]).isEqualTo(timestamps.length);
     }
 }
