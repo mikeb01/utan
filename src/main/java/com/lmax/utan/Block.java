@@ -5,13 +5,14 @@ import org.agrona.concurrent.AtomicBuffer;
 
 import static java.lang.Long.highestOneBit;
 import static java.lang.Long.numberOfTrailingZeros;
+import static java.lang.String.format;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class Block
 {
-    private static final int INITIAL_LENGTH = 32;
-    private static final int FIRST_TIMESTAMP_OFFSET = 4;
-    private static final int FIRST_VALUE_OFFSET = 12;
+    private static final int INITIAL_LENGTH = 64;
+    private static final int FIRST_TIMESTAMP_OFFSET = 8;
+    private static final int FIRST_VALUE_OFFSET = 16;
 
     private final AtomicBuffer buffer;
     private long tMinusOne = 0;
@@ -47,7 +48,7 @@ public class Block
     {
         buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BIG_ENDIAN);
         buffer.putDouble(FIRST_VALUE_OFFSET, val, BIG_ENDIAN);
-        setLength(160);
+        setLength(INITIAL_LENGTH + 128);
 
         tMinusOne = timestamp;
         tMinusTwo = timestamp;
@@ -109,20 +110,6 @@ public class Block
         return 1;
     }
 
-    private int writeBits(int bitOffset, int bitLength, long value)
-    {
-        int longOffset = bitOffset / 64;
-        int bitSubIndex = bitOffset & 63;
-        long valueHighPart = value >>> bitSubIndex;
-        long valueLowPart = value << (64 - bitSubIndex);
-
-        long bits = buffer.getLong(longOffset, BIG_ENDIAN);
-        buffer.putLong(longOffset, bits | valueHighPart, BIG_ENDIAN);
-        buffer.putLong(longOffset + 8, valueLowPart, BIG_ENDIAN);
-
-        return bitLength;
-    }
-
     private int appendTimestampDelta(int bitOffset, int numBits, long markerBits, long timestampDelta)
     {
         int markerBitLength = numberOfTrailingZeros(highestOneBit(markerBits) << 1);
@@ -158,7 +145,7 @@ public class Block
 
             length += writeBits(bitOffset,                          2, 0b11);
             length += writeBits(bitOffset + 2,                      5, leadingZeros);
-            length += writeBits(bitOffset + 2 + 5,                  6, relevantLength);
+            length += writeBits(bitOffset + 2 + 5,                  6, relevantLength - 1);
             length += writeBits(bitOffset + 2 + 5 + 6, relevantLength, xorValue >>> trailingZeros);
         }
 
@@ -257,7 +244,7 @@ public class Block
                 else if (0b11 == prefixBits)
                 {
                     int leadingZeros = readBits(bitOffset, 5);
-                    int length = readBits(bitOffset + 5, 6);
+                    int length = readBits(bitOffset + 5, 6) + 1;
                     long shift = 64 - (leadingZeros + length);
                     long xorValue = readBitsLong(bitOffset + 5 + 6, length) << shift;
 
@@ -289,15 +276,37 @@ public class Block
 
     private long readBitsLong(int bitOffset, int numBits)
     {
-        int byteOffset = bitOffset / 8;
-        int bitSubIndex = bitOffset & 7;
+        int longAlignedByteOffset = (bitOffset / 64) * 8;
+        int bitSubIndex = bitOffset & 63;
 
-        long bits = buffer.getLong(byteOffset, BIG_ENDIAN);
-        long mask = (1L << numBits) - 1;
-        long shift = (64 - bitSubIndex) - numBits;
-        long shiftedMask = mask << shift;
+        long bitsUpper = buffer.getLong(longAlignedByteOffset, BIG_ENDIAN);
+        long bitsLower = buffer.getLong(longAlignedByteOffset + 8, BIG_ENDIAN);
 
-        return (bits & shiftedMask) >>> shift;
+        int shiftRight = (64 - bitSubIndex) - numBits;
+
+        long mask = mask(numBits);
+        long valueHighPart = (shiftRight < 0) ? (bitsUpper << -shiftRight) & mask : (bitsUpper >>> shiftRight) & mask;
+        long valueLowPart = (shiftRight < 0) ? (bitsLower >>> (64 + shiftRight)) & mask(-shiftRight) : 0;
+
+        return valueHighPart | valueLowPart;
+    }
+
+    private int writeBits(int bitOffset, int bitLength, long value)
+    {
+        assert value < 1L << bitLength : format("writeBits(%d, %d (%d), %d)", bitOffset, bitLength, 1L << bitLength, value);
+
+        int longAlignedByteOffset = (bitOffset / 64) * 8;
+        int bitSubIndex = bitOffset & 63;
+        int shiftLeft = (64 - bitSubIndex) - bitLength;
+
+        long valueHighPart = (shiftLeft < 0) ? value >>> -shiftLeft : value << shiftLeft;
+        long valueLowPart = (shiftLeft < 0) ? value << 64 + shiftLeft : 0;
+
+        long bits = buffer.getLong(longAlignedByteOffset, BIG_ENDIAN);
+        buffer.putLong(longAlignedByteOffset, bits | valueHighPart, BIG_ENDIAN);
+        buffer.putLong(longAlignedByteOffset + 8, valueLowPart, BIG_ENDIAN);
+
+        return bitLength;
     }
 
     public interface ValueConsumer
@@ -308,6 +317,11 @@ public class Block
     static long compressBits(long value, int numBits)
     {
         return value & ((1 << (numBits - 1)) - 1) | ((value >>> 63) << (numBits - 1));
+    }
+    private static long mask(int numBits)
+    {
+        assert numBits <= 64;
+        return numBits == 64 ? 0xFFFFFFFF_FFFFFFFFL : (1L << numBits) - 1;
     }
 
     static long decompressBits(long value, int numBits)
