@@ -11,6 +11,7 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 public class Block
 {
     private static final int INITIAL_LENGTH = 64;
+    private static final int COMPRESSED_DATA_START = INITIAL_LENGTH + 128;
     private static final int FIRST_TIMESTAMP_OFFSET = 8;
     private static final int FIRST_VALUE_OFFSET = 16;
 
@@ -48,7 +49,7 @@ public class Block
     {
         buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BIG_ENDIAN);
         buffer.putDouble(FIRST_VALUE_OFFSET, val, BIG_ENDIAN);
-        setLength(INITIAL_LENGTH + 128);
+        setLength(COMPRESSED_DATA_START);
 
         tMinusOne = timestamp;
         tMinusTwo = timestamp;
@@ -293,7 +294,7 @@ public class Block
 
     private int writeBits(int bitOffset, int bitLength, long value)
     {
-        assert value < 1L << bitLength : format("writeBits(%d, %d (%d), %d)", bitOffset, bitLength, 1L << bitLength, value);
+        assert valueInRange(bitLength, value) : format("writeBits(%d, %d (%d), %d)", bitOffset, bitLength, 1L << bitLength, value);
 
         int longAlignedByteOffset = (bitOffset / 64) * 8;
         int bitSubIndex = bitOffset & 63;
@@ -318,10 +319,16 @@ public class Block
     {
         return value & ((1 << (numBits - 1)) - 1) | ((value >>> 63) << (numBits - 1));
     }
+
     private static long mask(int numBits)
     {
         assert numBits <= 64;
         return numBits == 64 ? 0xFFFFFFFF_FFFFFFFFL : (1L << numBits) - 1;
+    }
+
+    static boolean valueInRange(int bitLength, long value)
+    {
+        return (value & ~mask(bitLength)) == 0;
     }
 
     static long decompressBits(long value, int numBits)

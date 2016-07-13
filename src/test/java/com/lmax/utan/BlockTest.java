@@ -4,6 +4,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -154,6 +155,61 @@ public class BlockTest
         assertWriteAndReadValues(timestamps, values);
     }
 
+    @Test
+    public void shouldWriteUntilBufferIsFull() throws Exception
+    {
+        Random r = new Random(7);
+
+        List<Entry> entries = new ArrayList<>();
+
+        long lastTimestamp = 0;
+        long counter = 0;
+
+        try
+        {
+            while (true)
+            {
+                long timestamp = lastTimestamp + 1000 + (r.nextInt(100) - 50);
+                double value = r.nextDouble() * 1000;
+
+                b.append(timestamp, value);
+                counter++;
+
+                lastTimestamp = timestamp;
+
+                entries.add(new Entry(timestamp, value));
+            }
+        }
+        catch (IndexOutOfBoundsException e)
+        {
+            // Stop
+        }
+
+        assertTimestampsAndValues(b, entries);
+        System.out.println(counter);
+    }
+
+    @Test
+    public void shouldValidateWithinRange() throws Exception
+    {
+        assertThat(Block.valueInRange(2, 1)).isTrue();
+        assertThat(Block.valueInRange(63, 9196438390897981421L)).isTrue();
+        assertThat(Block.valueInRange(2, 4)).isFalse();
+    }
+
+    private void assertTimestampsAndValues(Block b, List<Entry> entries)
+    {
+        Iterator<Entry> iterator = entries.iterator();
+
+        b.foreach((t, v) -> {
+
+            Entry entry = iterator.next();
+
+            assertThat(t).isEqualTo(entry.timestamp);
+            assertThat(v).isEqualTo(entry.value);
+        });
+    }
+
     private void assertWriteAndReadValues(long[] timestamps, double[] values)
     {
         for (int i = 0; i < timestamps.length; i++)
@@ -171,5 +227,17 @@ public class BlockTest
         });
 
         assertThat(index[0]).isEqualTo(timestamps.length);
+    }
+
+    private static class Entry
+    {
+        private final long timestamp;
+        private final double value;
+
+        private Entry(long timestamp, double value)
+        {
+            this.timestamp = timestamp;
+            this.value = value;
+        }
     }
 }
