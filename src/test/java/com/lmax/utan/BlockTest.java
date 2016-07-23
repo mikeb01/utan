@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
 {
-    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[1 << 16]);
+    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[4096]);
     private final Block b = new Block(buffer);
 
     @Test
@@ -70,8 +70,6 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-//        assertThat(b.lengthInBits()).isEqualTo(4 * 8);
-
         b.append(timestamp, val);
         b.append(timestamp + 1000, val + 1);
         b.append(timestamp + 2000, val - 1);
@@ -120,7 +118,7 @@ public class BlockTest
     @Test
     public void shouldInsert1000DataPoints() throws Exception
     {
-        int count = 1000;
+        int count = 500;
         long[] timestamps = new long[count];
         double[] values = new double[count];
 
