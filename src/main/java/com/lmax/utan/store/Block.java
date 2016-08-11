@@ -77,9 +77,13 @@ public class Block
         {
             timestampBitsAdded = appendTimestampDelta(bitOffset, 12, 0b1110, d);
         }
-        else
+        else if (Integer.MIN_VALUE <= d && d <= Integer.MAX_VALUE)
         {
             timestampBitsAdded = appendTimestampDelta(bitOffset, 32, 0b11110, d);
+        }
+        else
+        {
+            throw new IllegalArgumentException("Timestamp delta out of range: " + d);
         }
 
         long valueAsLong = Double.doubleToLongBits(val);
@@ -205,9 +209,9 @@ public class Block
                 delta = decompressBits(readBits(bitOffset, 12), 12);
                 bitOffset += 12;
             }
-            else if (0b1111 == readBits(bitOffset, 4))
+            else if (0b11110 == readBits(bitOffset, 5))
             {
-                bitOffset += 4;
+                bitOffset += 5;
                 delta = decompressBits(readBits(bitOffset, 32), 32);
                 bitOffset += 32;
             }

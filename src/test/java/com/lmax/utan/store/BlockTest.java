@@ -146,7 +146,7 @@ public class BlockTest
 
         double d = Double.longBitsToDouble(l);
 
-        long[] timestamps = { 1000, 2000 };
+        long[] timestamps = { 0, Integer.MAX_VALUE };
         double[] values = { 0, d };
 
         assertWriteAndReadValues(timestamps, values);
