@@ -1,4 +1,4 @@
-package com.lmax.utan;
+package com.lmax.utan.store;
 
 import org.agrona.BitUtil;
 import org.agrona.concurrent.AtomicBuffer;

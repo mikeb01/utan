@@ -1,6 +1,7 @@
-package com.lmax.utan;
+package com.lmax.utan.store;
 
 import org.agrona.concurrent.UnsafeBuffer;
+import org.assertj.core.api.Assertions;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -8,8 +9,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
-import static com.lmax.utan.Block.compressBits;
-import static com.lmax.utan.Block.decompressBits;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
@@ -97,14 +96,14 @@ public class BlockTest
     {
         for (int i = -64, j = 64; i < 0; i++, j++)
         {
-            assertThat(compressBits(i, 7)).isEqualTo(j);
-            assertThat(decompressBits(compressBits(i, 7), 7)).isEqualTo(i);
+            Assertions.assertThat(Block.compressBits(i, 7)).isEqualTo(j);
+            Assertions.assertThat(Block.decompressBits(Block.compressBits(i, 7), 7)).isEqualTo(i);
         }
 
         for (int i = 0, j = 0; i < 64; i++, j++)
         {
-            assertThat(compressBits(i, 7)).isEqualTo(j);
-            assertThat(decompressBits(compressBits(i, 7), 7)).isEqualTo(i);
+            Assertions.assertThat(Block.compressBits(i, 7)).isEqualTo(j);
+            Assertions.assertThat(Block.decompressBits(Block.compressBits(i, 7), 7)).isEqualTo(i);
         }
     }
 
