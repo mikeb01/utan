@@ -335,6 +335,6 @@ public class Block
     {
         long sign = value >>> numBits - 1;
         long mask = (1 << (numBits - 1)) - 1;
-        return value & mask |-sign & ~mask;
+        return value & mask | -sign & ~mask;
     }
 }
