@@ -22,20 +22,10 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-        b.append(timestamp, val);
+        long[] timestamps = { timestamp };
+        double[] values = { val };
 
-        final long[] timestamps = { 0 };
-        final double[] values = { 0.0 };
-
-        int count = b.foreach((t, v) ->
-        {
-            timestamps[0] = t;
-            values[0] = v;
-        });
-
-        assertThat(count).isEqualTo(1);
-        assertThat(timestamps[0]).isEqualTo(timestamp);
-        assertThat(values[0]).isEqualTo(val);
+        assertWriteAndReadValues(timestamps, values);
     }
 
     @Test
@@ -44,23 +34,10 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-        b.append(timestamp, val);
-        b.append(timestamp, val);
+        long[] timestamps = { timestamp, timestamp };
+        double[] values = { val, val };
 
-        final List<Long> timestamps = new ArrayList<>();
-        final List<Double> values = new ArrayList<>();
-
-        int count = b.foreach((t, v) ->
-        {
-            timestamps.add(t);
-            values.add(v);
-        });
-
-        assertThat(count).isEqualTo(2);
-        assertThat(timestamps.get(0)).isEqualTo(timestamp);
-        assertThat(values.get(0)).isEqualTo(val);
-        assertThat(timestamps.get(1)).isEqualTo(timestamp);
-        assertThat(values.get(1)).isEqualTo(val);
+        assertWriteAndReadValues(timestamps, values);
     }
 
     @Test
@@ -69,26 +46,10 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-        b.append(timestamp, val);
-        b.append(timestamp + 1000, val + 1);
-        b.append(timestamp + 2000, val - 1);
+        long[] timestamps = { timestamp, timestamp + 1000, timestamp + 2000 };
+        double[] values = { val, val + 1, val - 1 };
 
-        final List<Long> timestamps = new ArrayList<>();
-        final List<Double> values = new ArrayList<>();
-
-        int count = b.foreach((t, v) ->
-        {
-            timestamps.add(t);
-            values.add(v);
-        });
-
-        assertThat(count).isEqualTo(3);
-        assertThat(timestamps.get(0)).isEqualTo(timestamp);
-        assertThat(values.get(0)).isEqualTo(val);
-        assertThat(timestamps.get(1)).isEqualTo(timestamp + 1000);
-        assertThat(values.get(1)).isEqualTo(val + 1);
-        assertThat(timestamps.get(2)).isEqualTo(timestamp + 2000);
-        assertThat(values.get(2)).isEqualTo(val - 1);
+        assertWriteAndReadValues(timestamps, values);
     }
 
     @Test
@@ -160,7 +121,6 @@ public class BlockTest
         List<Entry> entries = new ArrayList<>();
 
         long lastTimestamp = 0;
-        long counter = 0;
 
         try
         {
@@ -170,7 +130,6 @@ public class BlockTest
                 double value = r.nextDouble() * 1000;
 
                 b.append(timestamp, value);
-                counter++;
 
                 lastTimestamp = timestamp;
 
@@ -183,7 +142,6 @@ public class BlockTest
         }
 
         assertTimestampsAndValues(b, entries);
-        System.out.println(counter);
     }
 
     @Test
