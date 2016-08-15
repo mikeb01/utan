@@ -3,20 +3,19 @@ package com.lmax.utan;
 import com.lmax.utan.store.Block;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.Random;
 
 @State(Scope.Benchmark)
-public class BlockBenchmark
+public class BlockReadBenchmark
 {
-    private final long[] timestamps = new long[1024];
-    private final double[] values = new double[1024];
     private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[4096]);
     private final Block block = new Block(buffer);
+    private PerfConsumer consumer = new PerfConsumer();
 
     @Setup
     public void setUp()
@@ -24,38 +23,35 @@ public class BlockBenchmark
         final Random r = new Random(3);
         long lastTimestamp = System.currentTimeMillis();
 
-        for (int i = 0; i < timestamps.length; i++)
-        {
-            timestamps[i] = lastTimestamp;
-            lastTimestamp += (r.nextInt(200) - 100);
-
-            values[i] = f(r.nextDouble());
-        }
-
-    }
-
-    @Setup(Level.Invocation)
-    public void perInvocation()
-    {
-        buffer.setMemory(0, 4096, (byte) 0);
-    }
-
-    @Benchmark
-    public void fillBlock()
-    {
         try
         {
-            for (int i = 0; ; i++)
+            while (true)
             {
-                long timestamp = timestamps[i % (1024 - 1)];
-                double value = values[i % (1024 - 1)];
-
-                block.append(timestamp, value);
+                block.append(lastTimestamp, f(r.nextDouble()));
             }
         }
         catch (Exception e)
         {
             // Ignore
+        }
+    }
+
+    @Benchmark
+    public void consumeBlock(Blackhole bh)
+    {
+        consumer.blackhole = bh;
+        block.foreach(consumer);
+    }
+
+    private static class PerfConsumer implements Block.ValueConsumer
+    {
+        private Blackhole blackhole;
+
+        @Override
+        public void accept(long timestamp, double value)
+        {
+            blackhole.consume(timestamp);
+            blackhole.consume(value);
         }
     }
 
