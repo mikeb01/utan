@@ -162,11 +162,12 @@ public class BlockTest
         b.writeBitsToBuffer(15, 5, 0b10001L);
         b.writeBitsToBuffer(20, 20, 0b11111111111111111111L);
         b.writeBitsToBuffer(40, 55, 0b1010101_01010101_01010101_01010101_01010101_01010101_01010101L);
+        b.writeBitsToBuffer(95, 3, 0b111);
 
         assertThat(toBinaryString(b.getBitBufferPart(0))).isEqualTo("10001100011000110001111111111111");
         assertThat(toBinaryString(b.getBitBufferPart(1))).isEqualTo("11111111101010101010101010101010");
-        assertThat(toBinaryString(b.getBitBufferPart(2))).isEqualTo("10101010101010101010101010101010");
-        assertThat(b.getBitBufferPart(3)).isEqualTo(0);
+        assertThat(toBinaryString(b.getBitBufferPart(2))).isEqualTo("10101010101010101010101010101011");
+        assertThat(toBinaryString(b.getBitBufferPart(3))).isEqualTo("11000000000000000000000000000000");
     }
 
     private void assertTimestampsAndValues(Block b, List<Entry> entries)
