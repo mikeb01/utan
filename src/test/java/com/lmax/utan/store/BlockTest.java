@@ -9,6 +9,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
+import static java.lang.Integer.toBinaryString;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
@@ -150,6 +151,22 @@ public class BlockTest
         assertThat(Block.valueInRange(2, 1)).isTrue();
         assertThat(Block.valueInRange(63, 9196438390897981421L)).isTrue();
         assertThat(Block.valueInRange(2, 4)).isFalse();
+    }
+
+    @Test
+    public void shouldAppendBitsToBuffer() throws Exception
+    {
+        b.writeBitsToBuffer(0, 5, 0b10001L);
+        b.writeBitsToBuffer(5, 5, 0b10001L);
+        b.writeBitsToBuffer(10, 5, 0b10001L);
+        b.writeBitsToBuffer(15, 5, 0b10001L);
+        b.writeBitsToBuffer(20, 20, 0b11111111111111111111L);
+        b.writeBitsToBuffer(40, 55, 0b1010101_01010101_01010101_01010101_01010101_01010101_01010101L);
+
+        assertThat(toBinaryString(b.getBitBufferPart(0))).isEqualTo("10001100011000110001111111111111");
+        assertThat(toBinaryString(b.getBitBufferPart(1))).isEqualTo("11111111101010101010101010101010");
+        assertThat(toBinaryString(b.getBitBufferPart(2))).isEqualTo("10101010101010101010101010101010");
+        assertThat(b.getBitBufferPart(3)).isEqualTo(0);
     }
 
     private void assertTimestampsAndValues(Block b, List<Entry> entries)

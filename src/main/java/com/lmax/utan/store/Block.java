@@ -16,10 +16,16 @@ public class Block
     private static final int FIRST_VALUE_OFFSET = 16;
 
     private final AtomicBuffer buffer;
+
     private long tMinusOne = 0;
     private long tMinusTwo = 0;
     private double lastValue = 0.0;
     private long lastXorValue = 0;
+
+    private int bitBuffer0 = 0;
+    private int bitBuffer1 = 0;
+    private int bitBuffer2 = 0;
+    private int bitBuffer3 = 0;
 
     public Block(AtomicBuffer buffer)
     {
@@ -58,7 +64,9 @@ public class Block
 
     private void appendCompressed(int bitOffset, long timestamp, double val)
     {
-        long d = (timestamp - tMinusOne) - (tMinusOne - tMinusTwo);
+        resetBitBuffer();
+
+        final long d = (timestamp - tMinusOne) - (tMinusOne - tMinusTwo);
 
         final int timestampBitsAdded;
         if (d == 0)
@@ -110,12 +118,20 @@ public class Block
         setLength(newLength);
     }
 
+    private void resetBitBuffer()
+    {
+        bitBuffer0 = 0;
+        bitBuffer1 = 0;
+        bitBuffer2 = 0;
+        bitBuffer3 = 0;
+    }
+
     private int appendZeroTimestampDelta()
     {
         return 1;
     }
 
-    private int appendTimestampDelta(int bitOffset, int numBits, long markerBits, long timestampDelta)
+    private int appendTimestampDelta(int bitOffset, int numBits, int markerBits, long timestampDelta)
     {
         int markerBitLength = numberOfTrailingZeros(highestOneBit(markerBits) << 1);
 
@@ -294,6 +310,79 @@ public class Block
         long valueLowPart = (shiftRight < 0) ? (bitsLower >>> (64 + shiftRight)) & mask(-shiftRight) : 0;
 
         return valueHighPart | valueLowPart;
+    }
+
+    int writeBitsToBuffer(int bitOffset, int bitLength, long value)
+    {
+        assert bitOffset + bitLength < 128;
+
+        int offset = bitOffset;
+        int remaining = bitLength;
+
+        while (remaining > 0)
+        {
+            final int bitBufferPartIndex = offset / 32;
+            final int bitBufferPartOffset = offset % 32;
+            final int available = 32 - bitBufferPartOffset;
+
+            if (remaining <= available)
+            {
+                final long mask = (1L << remaining) - 1;
+                final int toAppend = (int) (value & mask) << (available - remaining);
+                setBitBufferPart(bitBufferPartIndex, toAppend);
+            }
+            else
+            {
+                final long mask = (1L << available) - 1;
+                final int excessBits = remaining - available;
+                final int toAppend = (int) ((value & (mask << excessBits)) >> (excessBits));
+                setBitBufferPart(bitBufferPartIndex, toAppend);
+            }
+
+            remaining -= available;
+            offset += available;
+        }
+
+        return bitLength;
+    }
+
+    private void setBitBufferPart(int bitBufferPartIndex, int toAppend)
+    {
+        switch (bitBufferPartIndex)
+        {
+            case 0:
+                this.bitBuffer0 |= toAppend;
+                break;
+            case 1:
+                this.bitBuffer1 |= toAppend;
+                break;
+            case 2:
+                this.bitBuffer2 |= toAppend;
+                break;
+            case 3:
+                this.bitBuffer3 |= toAppend;
+                break;
+            default:
+                assert false : "Invalid bit buffer part index: " + bitBufferPartIndex;
+        }
+
+    }
+
+    int getBitBufferPart(int bitBufferPartIndex)
+    {
+        switch (bitBufferPartIndex)
+        {
+            case 0:
+                return this.bitBuffer0;
+            case 1:
+                return this.bitBuffer1;
+            case 2:
+                return this.bitBuffer2;
+            case 3:
+                return this.bitBuffer3;
+        }
+
+        throw new IllegalStateException(bitBufferPartIndex + "");
     }
 
     private int writeBits(int bitOffset, int bitLength, long value)
