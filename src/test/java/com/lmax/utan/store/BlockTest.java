@@ -77,7 +77,7 @@ public class BlockTest
     }
 
     @Test
-    public void shouldInsert1000DataPoints() throws Exception
+    public void shouldInsert500DataPoints() throws Exception
     {
         int count = 500;
         long[] timestamps = new long[count];
@@ -122,25 +122,19 @@ public class BlockTest
         List<Entry> entries = new ArrayList<>();
 
         long lastTimestamp = 0;
-
-        try
+        boolean appended;
+        do
         {
-            while (true)
-            {
-                long timestamp = lastTimestamp + 1000 + (r.nextInt(100) - 50);
-                double value = r.nextDouble() * 1000;
+            long timestamp = lastTimestamp + 1000 + (r.nextInt(100) - 50);
+            double value = r.nextDouble() * 1000;
 
-                b.append(timestamp, value);
+            appended = b.append(timestamp, value);
 
-                lastTimestamp = timestamp;
+            lastTimestamp = timestamp;
 
-                entries.add(new Entry(timestamp, value));
-            }
+            entries.add(new Entry(timestamp, value));
         }
-        catch (IndexOutOfBoundsException e)
-        {
-            // Stop
-        }
+        while (appended);
 
         assertTimestampsAndValues(b, entries);
     }
@@ -156,13 +150,13 @@ public class BlockTest
     @Test
     public void shouldAppendBitsToBuffer() throws Exception
     {
-        b.writeBitsToBuffer(0, 5, 0b10001L);
-        b.writeBitsToBuffer(5, 5, 0b10001L);
-        b.writeBitsToBuffer(10, 5, 0b10001L);
-        b.writeBitsToBuffer(15, 5, 0b10001L);
-        b.writeBitsToBuffer(20, 20, 0b11111111111111111111L);
-        b.writeBitsToBuffer(40, 55, 0b1010101_01010101_01010101_01010101_01010101_01010101_01010101L);
-        b.writeBitsToBuffer(95, 3, 0b111);
+        b.writeBitsToBuffer(0, 0b10001L, 5);
+        b.writeBitsToBuffer(5, 0b10001L, 5);
+        b.writeBitsToBuffer(10, 0b10001L, 5);
+        b.writeBitsToBuffer(15, 0b10001L, 5);
+        b.writeBitsToBuffer(20, 0b11111111111111111111L, 20);
+        b.writeBitsToBuffer(40, 0b1010101_01010101_01010101_01010101_01010101_01010101_01010101L, 55);
+        b.writeBitsToBuffer(95, 0b111, 3);
 
         assertThat(toBinaryString(b.getBitBufferPart(0))).isEqualTo("10001100011000110001111111111111");
         assertThat(toBinaryString(b.getBitBufferPart(1))).isEqualTo("11111111101010101010101010101010");
@@ -185,7 +179,8 @@ public class BlockTest
 
     private void assertWriteAndReadValues(long[] timestamps, double[] values)
     {
-        for (int i = 0; i < timestamps.length; i++)
+        int i;
+        for (i = 0; i < timestamps.length; i++)
         {
             b.append(timestamps[i], values[i]);
         }

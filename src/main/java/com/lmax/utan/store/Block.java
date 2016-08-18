@@ -14,6 +14,7 @@ public class Block
     private static final int COMPRESSED_DATA_START = INITIAL_LENGTH + 128;
     private static final int FIRST_TIMESTAMP_OFFSET = 8;
     private static final int FIRST_VALUE_OFFSET = 16;
+    private static final int BIT_LENGTH_LIMIT = 4096 * 8;
 
     private final AtomicBuffer buffer;
 
@@ -38,16 +39,17 @@ public class Block
         buffer.putIntOrdered(0, length);
     }
 
-    public void append(long timestamp, double val)
+    public boolean append(long timestamp, double val)
     {
         int bitOffset = lengthInBits();
         if (bitOffset == INITIAL_LENGTH)
         {
             appendInitial(timestamp, val);
+            return true;
         }
         else
         {
-            appendCompressed(bitOffset, timestamp, val);
+            return appendCompressed(bitOffset, timestamp, val);
         }
     }
 
@@ -62,7 +64,7 @@ public class Block
         lastValue = val;
     }
 
-    private void appendCompressed(int bitOffset, long timestamp, double val)
+    private boolean appendCompressed(int bitOffset, long timestamp, double val)
     {
         resetBitBuffer();
 
@@ -75,19 +77,19 @@ public class Block
         }
         else if (-64 <= d && d <= 63)
         {
-            timestampBitsAdded = appendTimestampDelta(bitOffset, 7, 0b10, d);
+            timestampBitsAdded = appendTimestampDelta(0, 7, 0b10, d);
         }
         else if (-256 <= d && d <= 255)
         {
-            timestampBitsAdded = appendTimestampDelta(bitOffset, 9, 0b110, d);
+            timestampBitsAdded = appendTimestampDelta(0, 9, 0b110, d);
         }
         else if (-2048 <= d && d <= 2047)
         {
-            timestampBitsAdded = appendTimestampDelta(bitOffset, 12, 0b1110, d);
+            timestampBitsAdded = appendTimestampDelta(0, 12, 0b1110, d);
         }
         else if (Integer.MIN_VALUE <= d && d <= Integer.MAX_VALUE)
         {
-            timestampBitsAdded = appendTimestampDelta(bitOffset, 32, 0b11110, d);
+            timestampBitsAdded = appendTimestampDelta(0, 32, 0b11110, d);
         }
         else
         {
@@ -101,14 +103,23 @@ public class Block
         final int valueBitsAdded;
         if (xorValue == 0)
         {
-            valueBitsAdded = appendZeroValueXor(bitOffset + timestampBitsAdded);
+            valueBitsAdded = appendZeroValueXor(timestampBitsAdded);
         }
         else
         {
-            valueBitsAdded = appendValueXor(bitOffset + timestampBitsAdded, xorValue, lastXorValue);
+            valueBitsAdded = appendValueXor(timestampBitsAdded, xorValue, lastXorValue);
         }
 
-        int newLength = bitOffset + timestampBitsAdded + valueBitsAdded;
+        int totalBitsAdded = timestampBitsAdded + valueBitsAdded;
+
+        final int newLength = bitOffset + totalBitsAdded;
+
+        if (newLength > BIT_LENGTH_LIMIT)
+        {
+            return false;
+        }
+
+        flushBitBuffer(bitOffset, totalBitsAdded);
 
         tMinusTwo = tMinusOne;
         tMinusOne = timestamp;
@@ -116,14 +127,8 @@ public class Block
         lastXorValue = xorValue;
 
         setLength(newLength);
-    }
 
-    private void resetBitBuffer()
-    {
-        bitBuffer0 = 0;
-        bitBuffer1 = 0;
-        bitBuffer2 = 0;
-        bitBuffer3 = 0;
+        return true;
     }
 
     private int appendZeroTimestampDelta()
@@ -305,19 +310,20 @@ public class Block
 
         int shiftRight = (64 - bitSubIndex) - numBits;
 
-        long mask = mask(numBits);
+        long mask = longMask(numBits);
         long valueHighPart = (shiftRight < 0) ? (bitsUpper << -shiftRight) & mask : (bitsUpper >>> shiftRight) & mask;
-        long valueLowPart = (shiftRight < 0) ? (bitsLower >>> (64 + shiftRight)) & mask(-shiftRight) : 0;
+        long valueLowPart = (shiftRight < 0) ? (bitsLower >>> (64 + shiftRight)) & longMask(-shiftRight) : 0;
 
         return valueHighPart | valueLowPart;
     }
 
-    int writeBitsToBuffer(int bitOffset, int bitLength, long value)
+    int writeBitsToBuffer(int bufferBitIndex, long value, int valueBitLength)
     {
-        assert bitOffset + bitLength < 128;
+        assert valueInRange(valueBitLength, value) : format("value out of range - writeBits(%d, %d (%d), %d)", bufferBitIndex, valueBitLength, 1L << valueBitLength, value);
+        assert bufferBitIndex + valueBitLength < 128 : format("value too long - writeBits(%d, %d (%d), %d)", bufferBitIndex, valueBitLength, 1L << valueBitLength, value);
 
-        int offset = bitOffset;
-        int remaining = bitLength;
+        int offset = bufferBitIndex;
+        int remaining = valueBitLength;
 
         while (remaining > 0)
         {
@@ -325,25 +331,26 @@ public class Block
             final int bitBufferPartOffset = offset % 32;
             final int available = 32 - bitBufferPartOffset;
 
+            final int toAppend;
             if (remaining <= available)
             {
                 final long mask = (1L << remaining) - 1;
-                final int toAppend = (int) (value & mask) << (available - remaining);
-                setBitBufferPart(bitBufferPartIndex, toAppend);
+                toAppend = (int) (value & mask) << (available - remaining);
             }
             else
             {
                 final long mask = (1L << available) - 1;
                 final int excessBits = remaining - available;
-                final int toAppend = (int) ((value & (mask << excessBits)) >> (excessBits));
-                setBitBufferPart(bitBufferPartIndex, toAppend);
+                toAppend = (int) ((value & (mask << excessBits)) >>> (excessBits));
             }
+
+            setBitBufferPart(bitBufferPartIndex, toAppend);
 
             remaining -= available;
             offset += available;
         }
 
-        return bitLength;
+        return valueBitLength;
     }
 
     private void setBitBufferPart(int bitBufferPartIndex, int toAppend)
@@ -385,22 +392,67 @@ public class Block
         throw new IllegalStateException(bitBufferPartIndex + "");
     }
 
+    private void resetBitBuffer()
+    {
+        bitBuffer0 = 0;
+        bitBuffer1 = 0;
+        bitBuffer2 = 0;
+        bitBuffer3 = 0;
+    }
+
+    private void flushBitBuffer(int bufferBitIndex, int bitLength)
+    {
+        assert bitLength <= 128;
+
+        int intAlignedBufferByteIndex = (bufferBitIndex / 32) * 4;
+        int bufferBitSubIndex = bufferBitIndex & 31;
+
+        int existingValue = buffer.getInt(intAlignedBufferByteIndex, BIG_ENDIAN);
+
+        int bitBufferShifted0 = existingValue | (bitBuffer0 >>> bufferBitSubIndex);
+        int bitBufferShifted1 = (bitBuffer0 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (bitBuffer1 >>> bufferBitSubIndex);
+        int bitBufferShifted2 = (bitBuffer1 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (bitBuffer2 >>> bufferBitSubIndex);
+        int bitBufferShifted3 = (bitBuffer2 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (bitBuffer3 >>> bufferBitSubIndex);
+        int bitBufferShifted4 = (bitBuffer3 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex);
+
+        int bytesToWrite = (bufferBitSubIndex + bitLength + 32 - 1) / 32;
+        assert bytesToWrite <= 5 : "" + bytesToWrite;
+
+        switch (bytesToWrite)
+        {
+            case 5:
+                buffer.putInt(intAlignedBufferByteIndex + 16, bitBufferShifted4, BIG_ENDIAN);
+            case 4:
+                buffer.putInt(intAlignedBufferByteIndex + 12, bitBufferShifted3, BIG_ENDIAN);
+            case 3:
+                buffer.putInt(intAlignedBufferByteIndex + 8, bitBufferShifted2, BIG_ENDIAN);
+            case 2:
+                buffer.putInt(intAlignedBufferByteIndex + 4, bitBufferShifted1, BIG_ENDIAN);
+            case 1:
+                buffer.putInt(intAlignedBufferByteIndex, bitBufferShifted0, BIG_ENDIAN);
+            default:
+                // Ignore
+        }
+    }
+
     private int writeBits(int bitOffset, int bitLength, long value)
     {
         assert valueInRange(bitLength, value) : format("writeBits(%d, %d (%d), %d)", bitOffset, bitLength, 1L << bitLength, value);
 
-        int longAlignedByteOffset = (bitOffset / 64) * 8;
-        int bitSubIndex = bitOffset & 63;
-        int shiftLeft = (64 - bitSubIndex) - bitLength;
+        return writeBitsToBuffer(bitOffset, value, bitLength);
 
-        long valueHighPart = (shiftLeft < 0) ? value >>> -shiftLeft : value << shiftLeft;
-        long valueLowPart = (shiftLeft < 0) ? value << 64 + shiftLeft : 0;
-
-        long bits = buffer.getLong(longAlignedByteOffset, BIG_ENDIAN);
-        buffer.putLong(longAlignedByteOffset, bits | valueHighPart, BIG_ENDIAN);
-        buffer.putLong(longAlignedByteOffset + 8, valueLowPart, BIG_ENDIAN);
-
-        return bitLength;
+//        int longAlignedByteOffset = (bitOffset / 64) * 8;
+//        int bitSubIndex = bitOffset & 63;
+//        int shiftLeft = (64 - bitSubIndex) - bitLength;
+//
+//        long valueHighPart = (shiftLeft < 0) ? value >>> -shiftLeft : value << shiftLeft;
+//        long valueLowPart = (shiftLeft < 0) ? value << 64 + shiftLeft : 0;
+//
+//        long bits = buffer.getLong(longAlignedByteOffset, BIG_ENDIAN);
+//        buffer.putLong(longAlignedByteOffset, bits | valueHighPart, BIG_ENDIAN);
+//        buffer.putLong(longAlignedByteOffset + 8, valueLowPart, BIG_ENDIAN);
+//
+//        return bitLength;
     }
 
     public interface ValueConsumer
@@ -413,15 +465,21 @@ public class Block
         return value & ((1 << (numBits - 1)) - 1) | ((value >>> 63) << (numBits - 1));
     }
 
-    private static long mask(int numBits)
+    private static long longMask(int numBits)
     {
         assert numBits <= 64;
         return numBits == 64 ? 0xFFFFFFFF_FFFFFFFFL : (1L << numBits) - 1;
     }
 
+    private static int intMask(int numBits)
+    {
+        assert numBits <= 32;
+        return numBits == 32 ? 0xFFFFFFFF : (1 << numBits) - 1;
+    }
+
     static boolean valueInRange(int bitLength, long value)
     {
-        return (value & ~mask(bitLength)) == 0;
+        return (value & ~longMask(bitLength)) == 0;
     }
 
     static long decompressBits(long value, int numBits)
