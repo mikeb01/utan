@@ -150,18 +150,18 @@ public class BlockTest
     @Test
     public void shouldAppendBitsToBuffer() throws Exception
     {
-        b.writeBitsToBuffer(0, 0b10001L, 5);
-        b.writeBitsToBuffer(5, 0b10001L, 5);
-        b.writeBitsToBuffer(10, 0b10001L, 5);
-        b.writeBitsToBuffer(15, 0b10001L, 5);
-        b.writeBitsToBuffer(20, 0b11111111111111111111L, 20);
-        b.writeBitsToBuffer(40, 0b1010101_01010101_01010101_01010101_01010101_01010101_01010101L, 55);
-        b.writeBitsToBuffer(95, 0b111, 3);
+        b.writeBits(0, 0b10001L, 5);
+        b.writeBits(5, 0b10001L, 5);
+        b.writeBits(10, 0b10001L, 5);
+        b.writeBits(15, 0b10001L, 5);
+        b.writeBits(20, 0b11111111111111111111L, 20);
+        b.writeBits(40, 0b1010101_01010101_01010101_01010101_01010101_01010101_01010101L, 55);
+        b.writeBits(95, 0b111, 3);
 
-        assertThat(toBinaryString(b.getBitBufferPart(0))).isEqualTo("10001100011000110001111111111111");
-        assertThat(toBinaryString(b.getBitBufferPart(1))).isEqualTo("11111111101010101010101010101010");
-        assertThat(toBinaryString(b.getBitBufferPart(2))).isEqualTo("10101010101010101010101010101011");
-        assertThat(toBinaryString(b.getBitBufferPart(3))).isEqualTo("11000000000000000000000000000000");
+        assertThat(toBinaryString(b.getTempsPart(0))).isEqualTo("10001100011000110001111111111111");
+        assertThat(toBinaryString(b.getTempsPart(1))).isEqualTo("11111111101010101010101010101010");
+        assertThat(toBinaryString(b.getTempsPart(2))).isEqualTo("10101010101010101010101010101011");
+        assertThat(toBinaryString(b.getTempsPart(3))).isEqualTo("11000000000000000000000000000000");
     }
 
     private void assertTimestampsAndValues(Block b, List<Entry> entries)
