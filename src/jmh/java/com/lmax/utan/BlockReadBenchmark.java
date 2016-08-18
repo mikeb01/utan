@@ -23,16 +23,8 @@ public class BlockReadBenchmark
         final Random r = new Random(3);
         long lastTimestamp = System.currentTimeMillis();
 
-        try
+        while (block.append(lastTimestamp, f(r.nextDouble())))
         {
-            while (true)
-            {
-                block.append(lastTimestamp, f(r.nextDouble()));
-            }
-        }
-        catch (Exception e)
-        {
-            // Ignore
         }
     }
 

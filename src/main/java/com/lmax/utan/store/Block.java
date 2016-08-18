@@ -31,7 +31,7 @@ public class Block
     public Block(AtomicBuffer buffer)
     {
         this.buffer = buffer;
-        setLength(INITIAL_LENGTH);
+        reset();
     }
 
     private void setLength(int length)
@@ -93,7 +93,9 @@ public class Block
         }
         else
         {
-            throw new IllegalArgumentException("Timestamp delta out of range: " + d);
+            throw new IllegalArgumentException(format(
+                "Timestamp delta out of range - delta: %d, timestamp: %d, tMinusOne: %d, tMinusTwo: %d",
+                d, timestamp, tMinusOne, tMinusTwo));
         }
 
         long valueAsLong = Double.doubleToLongBits(val);
@@ -431,6 +433,17 @@ public class Block
             default:
                 // Ignore
         }
+    }
+
+    public void reset()
+    {
+        buffer.setMemory(0, 4096, (byte) 0);
+        tMinusOne = 0;
+        tMinusTwo = 0;
+        lastValue = 0.0;
+        lastXorValue = 0;
+
+        setLength(INITIAL_LENGTH);
     }
 
     public interface ValueConsumer

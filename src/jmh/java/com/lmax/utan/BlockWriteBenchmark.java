@@ -37,25 +37,19 @@ public class BlockWriteBenchmark
     @Setup(Level.Invocation)
     public void perInvocation()
     {
-        buffer.setMemory(0, 4096, (byte) 0);
+        block.reset();
     }
 
     @Benchmark
     public void fillBlock()
     {
-        try
+        boolean appended = true;
+        for (int i = 0; appended; i++)
         {
-            for (int i = 0; ; i++)
-            {
-                long timestamp = timestamps[i % (1024 - 1)];
-                double value = values[i % (1024 - 1)];
+            long timestamp = timestamps[i % (1024 - 1)];
+            double value = values[i % (1024 - 1)];
 
-                block.append(timestamp, value);
-            }
-        }
-        catch (Exception e)
-        {
-            // Ignore
+            appended = block.append(timestamp, value);
         }
     }
 
@@ -73,5 +67,12 @@ public class BlockWriteBenchmark
         {
             return (v - 0.9) * 2000;
         }
+    }
+
+    public static void main(String[] args)
+    {
+        BlockWriteBenchmark blockWriteBenchmark = new BlockWriteBenchmark();
+        blockWriteBenchmark.setUp();
+        blockWriteBenchmark.fillBlock();
     }
 }
