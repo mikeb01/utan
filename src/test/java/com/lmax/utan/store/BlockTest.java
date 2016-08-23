@@ -188,8 +188,10 @@ public class BlockTest
 
         b.copyTo(copy);
 
+//        assertThat(b.compareTo(copy)).isEqualTo(0);
+
         assertTimestampsAndValues(b, entries);
-//        assertTimestampsAndValues(copy, entries);
+        assertTimestampsAndValues(copy, entries);
     }
 
     private void assertTimestampsAndValues(Block b, List<Entry> entries)

@@ -16,7 +16,9 @@ public class Block
     private static final int COMPRESSED_DATA_START = INITIAL_LENGTH + 128;
     private static final int FIRST_TIMESTAMP_OFFSET = 8;
     private static final int FIRST_VALUE_OFFSET = 16;
-    private static final int BIT_LENGTH_LIMIT = 4096 * 8;
+    private static final int BYTE_LENGTH = 4096;
+    private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
+    private static final int INT_LENGTH = BYTE_LENGTH / 4;
     private static final int ALL_THE_LEASES = 1024;
 
     private final AtomicBuffer buffer;
@@ -487,6 +489,11 @@ public class Block
         }
     }
 
+    public int compareTo(Block other)
+    {
+        return buffer.compareTo(other.buffer);
+    }
+
     public interface ValueConsumer
     {
         void accept(long timestamp, double value);
@@ -523,6 +530,23 @@ public class Block
 
     public void copyTo(Block block)
     {
+        final int bitLength = lengthInBits();
+        buffer.getBytes(0, block.buffer, 0, 4096);
 
+        block.setLengthInBits(bitLength);
+        block.zeroRemaining();
+    }
+
+    private void zeroRemaining()
+    {
+        final int intAlignedByteIndex = (lengthInBits() / 32) * 4;
+        final int bitOffset = lengthInBits() % 32;
+        final int remainingValue = buffer.getInt(intAlignedByteIndex, BIG_ENDIAN) & (intMask(bitOffset) << (32 - bitOffset));
+        buffer.putInt(intAlignedByteIndex, remainingValue, BIG_ENDIAN);
+
+        for (int i = intAlignedByteIndex + 4; i < INT_LENGTH; i += 4)
+        {
+            buffer.putInt(i, 0);
+        }
     }
 }
