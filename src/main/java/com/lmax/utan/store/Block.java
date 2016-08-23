@@ -3,6 +3,8 @@ package com.lmax.utan.store;
 import org.agrona.BitUtil;
 import org.agrona.concurrent.AtomicBuffer;
 
+import java.util.concurrent.Semaphore;
+
 import static java.lang.Long.highestOneBit;
 import static java.lang.Long.numberOfTrailingZeros;
 import static java.lang.String.format;
@@ -15,8 +17,10 @@ public class Block
     private static final int FIRST_TIMESTAMP_OFFSET = 8;
     private static final int FIRST_VALUE_OFFSET = 16;
     private static final int BIT_LENGTH_LIMIT = 4096 * 8;
+    private static final int ALL_THE_LEASES = 1024;
 
     private final AtomicBuffer buffer;
+    private final Semaphore resetSemaphore = new Semaphore(ALL_THE_LEASES);
 
     private long tMinusOne = 0;
     private long tMinusTwo = 0;
@@ -34,12 +38,21 @@ public class Block
         reset();
     }
 
-    private void setLength(int length)
+    private void setLengthInBits(int length)
     {
         buffer.putIntOrdered(0, length);
     }
 
-    public boolean append(long timestamp, double val)
+    public int lengthInBits()
+    {
+        return buffer.getIntVolatile(0);
+    }
+
+    // ====================
+    // Writing to the block
+    // ====================
+
+    public synchronized boolean append(long timestamp, double val)
     {
         int bitOffset = lengthInBits();
         if (bitOffset == INITIAL_LENGTH)
@@ -57,7 +70,7 @@ public class Block
     {
         buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BIG_ENDIAN);
         buffer.putDouble(FIRST_VALUE_OFFSET, val, BIG_ENDIAN);
-        setLength(COMPRESSED_DATA_START);
+        setLengthInBits(COMPRESSED_DATA_START);
 
         tMinusOne = timestamp;
         tMinusTwo = timestamp;
@@ -128,7 +141,7 @@ public class Block
         lastValue = val;
         lastXorValue = xorValue;
 
-        setLength(newBitLength);
+        setLengthInBits(newBitLength);
 
         return true;
     }
@@ -181,12 +194,145 @@ public class Block
         return length;
     }
 
-    public int lengthInBits()
+    int writeBits(int tempBitIndex, long value, int valueBitLength)
     {
-        return buffer.getIntVolatile(0);
+        assert valueInRange(valueBitLength, value) : format("value out of range - writeBits(%d, %d (%d), %d)", tempBitIndex, valueBitLength, 1L << valueBitLength, value);
+        assert tempBitIndex + valueBitLength < 128 : format("value too long - writeBits(%d, %d (%d), %d)", tempBitIndex, valueBitLength, 1L << valueBitLength, value);
+
+        final int tempIntIndex = tempBitIndex / 32;
+        final int tempBitOffset = tempBitIndex % 32;
+
+        long shiftedValue = value << 64 - valueBitLength;
+        int upperPart = (int) (0xFFFFFFFFL & (shiftedValue >>> 32));
+        int lowerPart = (int) (0xFFFFFFFFL & shiftedValue);
+
+        final int localTemp0 = getTempPart(tempIntIndex) | upperPart >>> tempBitOffset;
+        final int localTemp1 = (upperPart & intMask(tempBitOffset)) << (32 - tempBitIndex) | lowerPart >>> tempBitOffset;
+        final int localTemp2 = (lowerPart & intMask(tempBitOffset)) << (32 - tempBitIndex);
+
+        final int intsToWrite = (tempBitOffset + valueBitLength + 32 - 1) / 32;
+        assert intsToWrite <= 3;
+
+        switch (intsToWrite)
+        {
+            case 3:
+                setTempPart(tempIntIndex + 2, localTemp2);
+            case 2:
+                setTempPart(tempIntIndex + 1, localTemp1);
+            case 1:
+                setTempPart(tempIntIndex, localTemp0);
+            default:
+                // Ignore
+        }
+
+        return valueBitLength;
     }
 
+    private void setTempPart(int bitBufferPartIndex, int toAppend)
+    {
+        switch (bitBufferPartIndex)
+        {
+            case 0:
+                this.temp0 |= toAppend;
+                break;
+            case 1:
+                this.temp1 |= toAppend;
+                break;
+            case 2:
+                this.temp2 |= toAppend;
+                break;
+            case 3:
+                this.temp3 |= toAppend;
+                break;
+            default:
+                assert false : "Invalid bit buffer part index: " + bitBufferPartIndex;
+        }
+    }
+
+    int getTempPart(int bitBufferPartIndex)
+    {
+        switch (bitBufferPartIndex)
+        {
+            case 0:
+                return this.temp0;
+            case 1:
+                return this.temp1;
+            case 2:
+                return this.temp2;
+            case 3:
+                return this.temp3;
+        }
+
+        throw new IllegalStateException(bitBufferPartIndex + "");
+    }
+
+    private void resetBitBuffer()
+    {
+        temp0 = 0;
+        temp1 = 0;
+        temp2 = 0;
+        temp3 = 0;
+    }
+
+    private void flushTemp(int bufferBitIndex, int bitLength)
+    {
+        assert bitLength <= 128;
+
+        int intAlignedBufferByteIndex = (bufferBitIndex / 32) * 4;
+        int bufferBitSubIndex = bufferBitIndex & 31;
+
+        int existingValue = buffer.getInt(intAlignedBufferByteIndex, BIG_ENDIAN);
+
+        int tempShifted0 = existingValue | (temp0 >>> bufferBitSubIndex);
+        int tempShifted1 = (temp0 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp1 >>> bufferBitSubIndex);
+        int tempShifted2 = (temp1 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp2 >>> bufferBitSubIndex);
+        int tempShifted3 = (temp2 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp3 >>> bufferBitSubIndex);
+        int tempShifted4 = (temp3 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex);
+
+        final int intsToWrite = (bufferBitSubIndex + bitLength + 32 - 1) / 32;
+        assert intsToWrite <= 5;
+
+        switch (intsToWrite)
+        {
+            case 5:
+                buffer.putInt(intAlignedBufferByteIndex + 16, tempShifted4, BIG_ENDIAN);
+            case 4:
+                buffer.putInt(intAlignedBufferByteIndex + 12, tempShifted3, BIG_ENDIAN);
+            case 3:
+                buffer.putInt(intAlignedBufferByteIndex + 8, tempShifted2, BIG_ENDIAN);
+            case 2:
+                buffer.putInt(intAlignedBufferByteIndex + 4, tempShifted1, BIG_ENDIAN);
+            case 1:
+                buffer.putInt(intAlignedBufferByteIndex, tempShifted0, BIG_ENDIAN);
+            default:
+                // Ignore
+        }
+    }
+
+    // ======================
+    // Iterating over results
+    // ======================
+
     public int foreach(ValueConsumer consumer)
+    {
+        if (resetSemaphore.tryAcquire())
+        {
+            try
+            {
+                return doForEach(consumer);
+            }
+            finally
+            {
+                resetSemaphore.release();
+            }
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    private int doForEach(ValueConsumer consumer)
     {
         int lengthInBits = lengthInBits();
 
@@ -320,130 +466,25 @@ public class Block
         return valueHighPart | valueLowPart;
     }
 
-    int writeBits(int tempBitIndex, long value, int valueBitLength)
+    public synchronized void reset()
     {
-        assert valueInRange(valueBitLength, value) : format("value out of range - writeBits(%d, %d (%d), %d)", tempBitIndex, valueBitLength, 1L << valueBitLength, value);
-        assert tempBitIndex + valueBitLength < 128 : format("value too long - writeBits(%d, %d (%d), %d)", tempBitIndex, valueBitLength, 1L << valueBitLength, value);
-
-        final int tempIntIndex = tempBitIndex / 32;
-        final int tempBitOffset = tempBitIndex % 32;
-
-        long shiftedValue = value << 64 - valueBitLength;
-        int upperPart = (int) (0xFFFFFFFFL & (shiftedValue >>> 32));
-        int lowerPart = (int) (0xFFFFFFFFL & shiftedValue);
-
-        final int localTemp0 = getTempPart(tempIntIndex) | upperPart >>> tempBitOffset;
-        final int localTemp1 = (upperPart & intMask(tempBitOffset)) << (32 - tempBitIndex) | lowerPart >>> tempBitOffset;
-        final int localTemp2 = (lowerPart & intMask(tempBitOffset)) << (32 - tempBitIndex);
-
-        final int intsToWrite = (tempBitOffset + valueBitLength + 32 - 1) / 32;
-        assert intsToWrite <= 3;
-
-        switch (intsToWrite)
+        if (resetSemaphore.tryAcquire(ALL_THE_LEASES))
         {
-            case 3:
-                setTempPart(tempIntIndex + 2, localTemp2);
-            case 2:
-                setTempPart(tempIntIndex + 1, localTemp1);
-            case 1:
-                setTempPart(tempIntIndex, localTemp0);
-            default:
-                // Ignore
+            try
+            {
+                buffer.setMemory(0, 4096, (byte) 0);
+                tMinusOne = 0;
+                tMinusTwo = 0;
+                lastValue = 0.0;
+                lastXorValue = 0;
+
+                setLengthInBits(INITIAL_LENGTH);
+            }
+            finally
+            {
+                resetSemaphore.release(ALL_THE_LEASES);
+            }
         }
-
-        return valueBitLength;
-    }
-
-    private void setTempPart(int bitBufferPartIndex, int toAppend)
-    {
-        switch (bitBufferPartIndex)
-        {
-            case 0:
-                this.temp0 |= toAppend;
-                break;
-            case 1:
-                this.temp1 |= toAppend;
-                break;
-            case 2:
-                this.temp2 |= toAppend;
-                break;
-            case 3:
-                this.temp3 |= toAppend;
-                break;
-            default:
-                assert false : "Invalid bit buffer part index: " + bitBufferPartIndex;
-        }
-    }
-
-    int getTempPart(int bitBufferPartIndex)
-    {
-        switch (bitBufferPartIndex)
-        {
-            case 0:
-                return this.temp0;
-            case 1:
-                return this.temp1;
-            case 2:
-                return this.temp2;
-            case 3:
-                return this.temp3;
-        }
-
-        throw new IllegalStateException(bitBufferPartIndex + "");
-    }
-
-    private void resetBitBuffer()
-    {
-        temp0 = 0;
-        temp1 = 0;
-        temp2 = 0;
-        temp3 = 0;
-    }
-
-    private void flushTemp(int bufferBitIndex, int bitLength)
-    {
-        assert bitLength <= 128;
-
-        int intAlignedBufferByteIndex = (bufferBitIndex / 32) * 4;
-        int bufferBitSubIndex = bufferBitIndex & 31;
-
-        int existingValue = buffer.getInt(intAlignedBufferByteIndex, BIG_ENDIAN);
-
-        int tempShifted0 = existingValue | (temp0 >>> bufferBitSubIndex);
-        int tempShifted1 = (temp0 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp1 >>> bufferBitSubIndex);
-        int tempShifted2 = (temp1 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp2 >>> bufferBitSubIndex);
-        int tempShifted3 = (temp2 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp3 >>> bufferBitSubIndex);
-        int tempShifted4 = (temp3 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex);
-
-        final int intsToWrite = (bufferBitSubIndex + bitLength + 32 - 1) / 32;
-        assert intsToWrite <= 5;
-
-        switch (intsToWrite)
-        {
-            case 5:
-                buffer.putInt(intAlignedBufferByteIndex + 16, tempShifted4, BIG_ENDIAN);
-            case 4:
-                buffer.putInt(intAlignedBufferByteIndex + 12, tempShifted3, BIG_ENDIAN);
-            case 3:
-                buffer.putInt(intAlignedBufferByteIndex + 8, tempShifted2, BIG_ENDIAN);
-            case 2:
-                buffer.putInt(intAlignedBufferByteIndex + 4, tempShifted1, BIG_ENDIAN);
-            case 1:
-                buffer.putInt(intAlignedBufferByteIndex, tempShifted0, BIG_ENDIAN);
-            default:
-                // Ignore
-        }
-    }
-
-    public void reset()
-    {
-        buffer.setMemory(0, 4096, (byte) 0);
-        tMinusOne = 0;
-        tMinusTwo = 0;
-        lastValue = 0.0;
-        lastXorValue = 0;
-
-        setLength(INITIAL_LENGTH);
     }
 
     public interface ValueConsumer

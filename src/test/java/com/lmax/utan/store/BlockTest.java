@@ -18,6 +18,17 @@ public class BlockTest
     private final Block b = new Block(buffer);
 
     @Test
+    public void iterateOnEmptyBlock() throws Exception
+    {
+        final int[] c = { 0 };
+        b.foreach((t, v) -> {
+            c[0]++;
+        });
+
+        assertThat(c[0]).isEqualTo(0);
+    }
+
+    @Test
     public void storeAndGetFirstValue() throws Exception
     {
         long timestamp = System.currentTimeMillis();
