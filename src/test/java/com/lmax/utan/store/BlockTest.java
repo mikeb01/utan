@@ -14,8 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
 {
-    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[4096]);
-    private final Block b = new Block(buffer);
+    private final Block b = new Block(new UnsafeBuffer(new byte[4096]));
+    private final Block copy = new Block(new UnsafeBuffer(new byte[4096]));
 
     @Test
     public void iterateOnEmptyBlock() throws Exception
@@ -133,19 +133,20 @@ public class BlockTest
         List<Entry> entries = new ArrayList<>();
 
         long lastTimestamp = 0;
-        boolean appended;
         do
         {
             long timestamp = lastTimestamp + 1000 + (r.nextInt(100) - 50);
             double value = r.nextDouble() * 1000;
 
-            appended = b.append(timestamp, value);
+            if(!b.append(timestamp, value))
+            {
+                break;
+            }
 
             lastTimestamp = timestamp;
-
             entries.add(new Entry(timestamp, value));
         }
-        while (appended);
+        while (true);
 
         assertTimestampsAndValues(b, entries);
     }
@@ -175,37 +176,36 @@ public class BlockTest
         assertThat(toBinaryString(b.getTempPart(3))).isEqualTo("11000000000000000000000000000000");
     }
 
-    private void assertTimestampsAndValues(Block b, List<Entry> entries)
-    {
-        Iterator<Entry> iterator = entries.iterator();
-
-        b.foreach((t, v) -> {
-
-            Entry entry = iterator.next();
-
-            assertThat(t).isEqualTo(entry.timestamp);
-            assertThat(v).isEqualTo(entry.value);
-        });
-    }
-
     private void assertWriteAndReadValues(long[] timestamps, double[] values)
     {
-        int i;
-        for (i = 0; i < timestamps.length; i++)
+        final List<Entry> entries = new ArrayList<>(timestamps.length);
+
+        for (int i = 0; i < timestamps.length; i++)
         {
             b.append(timestamps[i], values[i]);
+            entries.add(new Entry(timestamps[i], values[i]));
         }
 
-        int index[] = { 0 };
+        b.copyTo(copy);
+
+        assertTimestampsAndValues(b, entries);
+//        assertTimestampsAndValues(copy, entries);
+    }
+
+    private void assertTimestampsAndValues(Block b, List<Entry> entries)
+    {
+        final Iterator<Entry> iterator = entries.iterator();
+        final int index[] = { 0 };
 
         b.foreach((t, v) -> {
-            assertThat(t).as("Timestamp index: %d", index[0]).isEqualTo(timestamps[index[0]]);
-            assertThat(v).as("Value index: %d", index[0]).isEqualTo(values[index[0]]);
+            final Entry entry = iterator.next();
+            assertThat(t).isEqualTo(entry.timestamp);
+            assertThat(v).isEqualTo(entry.value);
 
             index[0]++;
         });
 
-        assertThat(index[0]).isEqualTo(timestamps.length);
+        assertThat(index[0]).isEqualTo(entries.size());
     }
 
     private static class Entry

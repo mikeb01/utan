@@ -185,7 +185,7 @@ public class Block
         {
             int relevantLength = 64 - (leadingZeros + trailingZeros);
 
-            length += writeBits(bitOffset, (long) 0b11, 2);
+            length += writeBits(bitOffset, 0b11L, 2);
             length += writeBits(bitOffset + 2, (long) leadingZeros, 5);
             length += writeBits(bitOffset + 2 + 5, (long) (relevantLength - 1), 6);
             length += writeBits(bitOffset + 2 + 5 + 6, xorValue >>> trailingZeros, relevantLength);
@@ -519,5 +519,10 @@ public class Block
         long sign = value >>> numBits - 1;
         long mask = (1 << (numBits - 1)) - 1;
         return value & mask | -sign & ~mask;
+    }
+
+    public void copyTo(Block block)
+    {
+
     }
 }
