@@ -188,7 +188,7 @@ public class BlockTest
 
         b.copyTo(copy);
 
-//        assertThat(b.compareTo(copy)).isEqualTo(0);
+        assertThat(b.compareTo(copy)).isEqualTo(0);
 
         assertTimestampsAndValues(b, entries);
         assertTimestampsAndValues(copy, entries);
