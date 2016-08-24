@@ -2,6 +2,7 @@ package com.lmax.utan.store;
 
 import org.agrona.BitUtil;
 import org.agrona.concurrent.AtomicBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 
 import java.util.concurrent.Semaphore;
 
@@ -33,6 +34,11 @@ public class Block
     private int temp1 = 0;
     private int temp2 = 0;
     private int temp3 = 0;
+
+    public Block()
+    {
+        this(new UnsafeBuffer(new byte[4096]));
+    }
 
     public Block(AtomicBuffer buffer)
     {
@@ -468,9 +474,10 @@ public class Block
         return valueHighPart | valueLowPart;
     }
 
-    public synchronized void reset()
+    public synchronized boolean reset()
     {
-        if (resetSemaphore.tryAcquire(ALL_THE_LEASES))
+        final boolean resetAcquired = resetSemaphore.tryAcquire(ALL_THE_LEASES);
+        if (resetAcquired)
         {
             try
             {
@@ -487,6 +494,8 @@ public class Block
                 resetSemaphore.release(ALL_THE_LEASES);
             }
         }
+
+        return resetAcquired;
     }
 
     public int compareTo(Block other)
@@ -530,11 +539,21 @@ public class Block
 
     public void copyTo(Block block)
     {
-        final int bitLength = lengthInBits();
-        buffer.getBytes(0, block.buffer, 0, 4096);
+        if (resetSemaphore.tryAcquire())
+        {
+            try
+            {
+                final int bitLength = lengthInBits();
+                buffer.getBytes(0, block.buffer, 0, 4096);
 
-        block.setLengthInBits(bitLength);
-        block.zeroRemaining();
+                block.setLengthInBits(bitLength);
+                block.zeroRemaining();
+            }
+            finally
+            {
+                resetSemaphore.release();
+            }
+        }
     }
 
     private void zeroRemaining()

@@ -49,7 +49,10 @@ public class BlockConcurrencyTest
                     }
                 }
 
-                block.reset();
+                while (!block.reset())
+                {
+                    // No-op
+                }
             }
         });
 
@@ -68,6 +71,52 @@ public class BlockConcurrencyTest
                 block.foreach(verifier);
                 total += verifier.counter;
                 verifier.reset();
+            }
+        }
+
+        assertThat(total).isNotEqualTo(0);
+    }
+
+    @Test
+    public void ensureConcurrentCopiesSeeAConsistentView() throws Exception
+    {
+        Verifier verifier = new Verifier();
+        CountDownLatch latch = new CountDownLatch(1);
+        Thread t = new Thread(() ->
+        {
+            latch.countDown();
+
+            while (!Thread.currentThread().isInterrupted())
+            {
+                for (int i = 0; i < timestamps.length; i++)
+                {
+                    if (!block.append(timestamps[i], values[i]))
+                    {
+                        break;
+                    }
+                }
+
+                block.reset();
+            }
+        });
+
+        t.setDaemon(true);
+        t.start();
+        latch.await();
+
+        final long t0 = System.currentTimeMillis();
+        final Block copy = new Block();
+        long total = 0;
+
+        while (System.currentTimeMillis() - t0 < 5000)
+        {
+            for (int i = 0; i < 20_000; i++)
+            {
+                block.copyTo(copy);
+                copy.foreach(verifier);
+                total += verifier.counter;
+                verifier.reset();
+                copy.reset();
             }
         }
 
