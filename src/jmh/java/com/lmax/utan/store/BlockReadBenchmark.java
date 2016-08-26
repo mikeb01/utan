@@ -1,6 +1,5 @@
-package com.lmax.utan;
+package com.lmax.utan.store;
 
-import com.lmax.utan.store.Block;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Scope;
