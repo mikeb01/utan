@@ -194,7 +194,7 @@ public class BlockTest
         assertTimestampsAndValues(copy, entries);
     }
 
-    private void assertTimestampsAndValues(Block b, List<Entry> entries)
+    static void assertTimestampsAndValues(Block b, List<Entry> entries)
     {
         final Iterator<Entry> iterator = entries.iterator();
         final int index[] = { 0 };
@@ -210,15 +210,4 @@ public class BlockTest
         assertThat(index[0]).isEqualTo(entries.size());
     }
 
-    private static class Entry
-    {
-        private final long timestamp;
-        private final double value;
-
-        private Entry(long timestamp, double value)
-        {
-            this.timestamp = timestamp;
-            this.value = value;
-        }
-    }
 }

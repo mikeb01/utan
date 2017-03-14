@@ -46,6 +46,11 @@ public class Block
         reset();
     }
 
+    public static Block new4kHeapBlock()
+    {
+        return new Block(new UnsafeBuffer(new byte[4096]));
+    }
+
     private void setLengthInBits(int length)
     {
         buffer.putIntOrdered(0, length);
@@ -463,7 +468,15 @@ public class Block
         int bitSubIndex = bitOffset & 63;
 
         long bitsUpper = buffer.getLong(longAlignedByteOffset, BIG_ENDIAN);
-        long bitsLower = buffer.getLong(longAlignedByteOffset + 8, BIG_ENDIAN);
+        long bitsLower;
+        if (longAlignedByteOffset + 8 < buffer.capacity())
+        {
+            bitsLower = buffer.getLong(longAlignedByteOffset + 8, BIG_ENDIAN);
+        }
+        else
+        {
+            bitsLower = 0;
+        }
 
         int shiftRight = (64 - bitSubIndex) - numBits;
 
