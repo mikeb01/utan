@@ -34,7 +34,7 @@ public class ValueDataSeries
         for (Block block : blockSource.lastN(blocks.length))
         {
             int index = getAndIncrementHeadIndex();
-            blocks[index] = block;
+            block.copyTo(blocks[index]);
         }
     }
 
