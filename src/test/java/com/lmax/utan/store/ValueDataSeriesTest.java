@@ -1,16 +1,14 @@
 package com.lmax.utan.store;
 
 import com.lmax.collection.Maps;
-import org.assertj.core.api.Assertions;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.function.Supplier;
 
 import static com.lmax.utan.store.Block.new4kHeapBlock;
 import static com.lmax.utan.store.BlockGenerator.generateBlockData;
@@ -30,10 +28,11 @@ public class ValueDataSeriesTest
         final List<Entry> entries = new ArrayList<>();
         final Block b = new4kHeapBlock();
 
-        final long startTimestamp = abs(random.nextLong());
-        final long endTimestamp = generateBlockData(startTimestamp, random, b, entries);
+        TimeSeriesSupplier supplier = new TimeSeriesSupplier(54321L);
 
-        assertQuery(entries, startTimestamp, endTimestamp, singletonList(b));
+        generateBlockData(supplier, b, entries);
+
+        assertQuery(entries, singletonList(b));
     }
 
     @Test
@@ -43,15 +42,30 @@ public class ValueDataSeriesTest
         final Block b1 = new4kHeapBlock();
         final Block b2 = new4kHeapBlock();
 
-        final long beginTimestamp1 = abs(random.nextLong());
-        final long endTimestamp1 = generateBlockData(beginTimestamp1, random, b1, entries);
-        final long endTimestamp2 = generateBlockData(endTimestamp1 + 1000, random, b1, entries);
+        TimeSeriesSupplier supplier = new TimeSeriesSupplier(12345L);
+        generateBlockData(supplier, b1, entries);
+        generateBlockData(supplier, b2, entries);
 
-        assertQuery(entries, beginTimestamp1, endTimestamp2, asList(b1, b2));
+        assertQuery(entries, asList(b1, b2));
     }
 
-    private void assertQuery(List<Entry> entries, long beginTimestamp, long endTimestamp, List<Block> blocks)
+    @Test
+    public void inputValuesBeyondValueDataSeriesCapacity() throws Exception
     {
+        Supplier<Entry> supplier = new TimeSeriesSupplier(67890);
+
+        while (valueDataSeries.head() < valueDataSeries.capacity() + 1)
+        {
+            Entry entry = supplier.get();
+            valueDataSeries.append(entry.timestamp, entry.value);
+        }
+    }
+
+    private void assertQuery(List<Entry> entries, List<Block> blocks)
+    {
+        long beginTimestamp = entries.get(0).timestamp;
+        long endTimestamp = entries.get(entries.size() - 1).timestamp;
+
         Map<Long, Double> timestampToValue = Maps.mapOf(entries, (e, m) -> m.put(e.timestamp, e.value), HashMap::new);
 
         valueDataSeries.load(n -> blocks);

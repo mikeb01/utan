@@ -4,6 +4,7 @@ import org.agrona.BitUtil;
 import org.agrona.concurrent.AtomicBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.Semaphore;
 
 import static java.lang.Long.highestOneBit;
@@ -49,6 +50,21 @@ public class Block
     public static Block new4kHeapBlock()
     {
         return new Block(new UnsafeBuffer(new byte[4096]));
+    }
+
+    public static Block[] new4KDirectBlocks(int n)
+    {
+        final int size = n * BYTE_LENGTH;
+        final ByteBuffer backingBuffer = ByteBuffer.allocateDirect(size);
+        final Block[] blocks = new Block[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            UnsafeBuffer blockBuffer = new UnsafeBuffer(backingBuffer, i * BYTE_LENGTH, BYTE_LENGTH);
+            blocks[i] = new Block(blockBuffer);
+        }
+
+        return blocks;
     }
 
     private void setLengthInBits(int length)

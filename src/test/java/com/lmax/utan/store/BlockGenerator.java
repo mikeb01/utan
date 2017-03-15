@@ -1,30 +1,25 @@
 package com.lmax.utan.store;
 
 import java.util.List;
-import java.util.Random;
+import java.util.function.Supplier;
 
 public class BlockGenerator
 {
-    public static long generateBlockData(final long startTimestamp, Random r, Block block, List<Entry> entries)
+    public static void generateBlockData(
+        final Supplier<Entry> supplier,
+        final Block block,
+        final List<Entry> entries)
     {
-        long timestamp = startTimestamp;
-        int value;
-
         do
         {
-            value = r.nextInt(101);
-
-            if (!block.append(timestamp, value))
+            Entry entry = supplier.get();
+            if (!block.append(entry.timestamp, entry.value))
             {
                 break;
             }
 
-            entries.add(new Entry(timestamp, value));
-
-            timestamp += (1000 + (50 - r.nextInt(100)));
+            entries.add(entry);
         }
         while (true);
-
-        return timestamp;
     }
 }
