@@ -24,6 +24,8 @@ public class BlockTest
         b.foreach((t, v) -> c[0]++);
 
         assertThat(c[0]).isEqualTo(0);
+        assertThat(b.isEmpty()).isTrue();
+        assertThat(b.firstTimestamp()).isZero();
     }
 
     @Test
@@ -36,6 +38,8 @@ public class BlockTest
         double[] values = { val };
 
         assertWriteAndReadValues(timestamps, values);
+        assertThat(b.lengthInBits()).isEqualTo(Block.COMPRESSED_DATA_START);
+        assertThat(b.firstTimestamp()).isEqualTo(timestamp);
     }
 
     @Test

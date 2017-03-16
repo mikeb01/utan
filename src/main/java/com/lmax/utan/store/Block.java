@@ -14,10 +14,10 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class Block
 {
-    private static final int INITIAL_LENGTH = 64;
-    private static final int COMPRESSED_DATA_START = INITIAL_LENGTH + 128;
-    private static final int FIRST_TIMESTAMP_OFFSET = 8;
-    private static final int FIRST_VALUE_OFFSET = 16;
+    private static final int HEADER_LENGTH = 128;
+    static final int COMPRESSED_DATA_START = HEADER_LENGTH + 128;
+    private static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH / 8;
+    private static final int FIRST_VALUE_OFFSET = FIRST_TIMESTAMP_OFFSET + 8;
     private static final int BYTE_LENGTH = 4096;
     private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
     private static final int INT_LENGTH = BYTE_LENGTH / 4;
@@ -84,7 +84,7 @@ public class Block
     public synchronized boolean append(long timestamp, double val)
     {
         int bitOffset = lengthInBits();
-        if (bitOffset == INITIAL_LENGTH)
+        if (bitOffset == HEADER_LENGTH)
         {
             appendInitial(timestamp, val);
             return true;
@@ -93,6 +93,16 @@ public class Block
         {
             return appendCompressed(bitOffset, timestamp, val);
         }
+    }
+
+    public boolean isEmpty()
+    {
+        return lengthInBits() == HEADER_LENGTH;
+    }
+
+    public long firstTimestamp()
+    {
+        return buffer.getLong(FIRST_TIMESTAMP_OFFSET, BIG_ENDIAN);
     }
 
     private void appendInitial(long timestamp, double val)
@@ -365,7 +375,7 @@ public class Block
     {
         int lengthInBits = lengthInBits();
 
-        if (lengthInBits <= INITIAL_LENGTH)
+        if (lengthInBits <= HEADER_LENGTH)
         {
             return 0;
         }
@@ -379,7 +389,7 @@ public class Block
         long tMinusOne = timestamp;
         long tMinusTwo = timestamp;
 
-        int bitOffset = INITIAL_LENGTH + ((BitUtil.SIZE_OF_LONG + BitUtil.SIZE_OF_LONG) * 8);
+        int bitOffset = HEADER_LENGTH + ((BitUtil.SIZE_OF_LONG + BitUtil.SIZE_OF_LONG) * 8);
 
         int count = 1;
         while (bitOffset < lengthInBits)
@@ -516,7 +526,7 @@ public class Block
                 lastValue = 0.0;
                 lastXorValue = 0;
 
-                setLengthInBits(INITIAL_LENGTH);
+                setLengthInBits(HEADER_LENGTH);
             }
             finally
             {
