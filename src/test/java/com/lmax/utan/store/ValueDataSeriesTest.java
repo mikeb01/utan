@@ -8,14 +8,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Supplier;
 
 import static com.lmax.utan.store.Block.new4kHeapBlock;
 import static com.lmax.utan.store.BlockGenerator.generateBlockData;
-import static java.lang.Math.abs;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.fail;
 
 public class ValueDataSeriesTest
 {
@@ -61,6 +62,65 @@ public class ValueDataSeriesTest
         }
     }
 
+    @Test
+    public void blowUpIfDataWouldGetWrapped() throws Exception
+    {
+        Supplier<Entry> supplier = new TimeSeriesSupplier(67890);
+        CountDownLatch latch = new CountDownLatch(1);
+
+        Runnable r = () -> valueDataSeries.query(
+            0, Long.MAX_VALUE,
+            (k, v) ->
+            {
+                try
+                {
+                    latch.await();
+                }
+                catch (InterruptedException e)
+                {
+                    // No-op
+                }
+            });
+
+        Thread t = new Thread(r);
+        t.start();
+
+        while (valueDataSeries.head() < 4)
+        {
+            Entry entry = supplier.get();
+            valueDataSeries.append(entry.timestamp, entry.value);
+        }
+
+        try
+        {
+            for (int i = 0; i < 1_000_000; i++)
+            {
+                Entry entry = supplier.get();
+                valueDataSeries.append(entry.timestamp, entry.value);
+            }
+
+            fail("Should have thrown exception");
+        }
+        catch (RuntimeException e)
+        {
+            // No-op
+        }
+
+        try
+        {
+            Entry entry = supplier.get();
+            valueDataSeries.append(entry.timestamp, entry.value);
+            fail("Should have thrown exception");
+        }
+        catch (RuntimeException e)
+        {
+            // No-op
+        }
+
+        latch.countDown();
+        t.join();
+    }
+
     private void assertQuery(List<Entry> entries, List<Block> blocks)
     {
         long beginTimestamp = entries.get(0).timestamp;
@@ -82,9 +142,7 @@ public class ValueDataSeriesTest
             {
                 assertThat(k).isGreaterThanOrEqualTo(queryStart);
                 assertThat(k).isLessThan(queryEnd);
-
                 assertThat(v).isEqualTo(timestampToValue.get(k));
-
                 count[0]++;
             });
 

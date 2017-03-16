@@ -597,4 +597,16 @@ public class Block
             buffer.putInt(i, 0);
         }
     }
+
+    @Override
+    public String toString()
+    {
+        return "Block{" +
+            "bitLength=" + lengthInBits() +
+            ", tMinusOne=" + tMinusOne +
+            ", tMinusTwo=" + tMinusTwo +
+            ", lastValue=" + lastValue +
+            ", lastXorValue=" + lastXorValue +
+            '}';
+    }
 }
