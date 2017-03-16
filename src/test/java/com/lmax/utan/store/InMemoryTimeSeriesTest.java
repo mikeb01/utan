@@ -18,9 +18,9 @@ import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
 
-public class ValueDataSeriesTest
+public class InMemoryTimeSeriesTest
 {
-    private final ValueDataSeries valueDataSeries = new ValueDataSeries(1234567, 4);
+    private final InMemoryTimeSeries inMemoryTimeSeries = new InMemoryTimeSeries(4);
     private Random random = new Random(27364L);
 
     @Test
@@ -55,10 +55,10 @@ public class ValueDataSeriesTest
     {
         Supplier<Entry> supplier = new TimeSeriesSupplier(67890);
 
-        while (valueDataSeries.head() < valueDataSeries.capacity() + 1)
+        while (inMemoryTimeSeries.head() < inMemoryTimeSeries.capacity() + 1)
         {
             Entry entry = supplier.get();
-            valueDataSeries.append(entry.timestamp, entry.value);
+            inMemoryTimeSeries.append(entry.timestamp, entry.value);
         }
     }
 
@@ -68,7 +68,7 @@ public class ValueDataSeriesTest
         Supplier<Entry> supplier = new TimeSeriesSupplier(67890);
         CountDownLatch latch = new CountDownLatch(1);
 
-        Runnable r = () -> valueDataSeries.query(
+        Runnable r = () -> inMemoryTimeSeries.query(
             0, Long.MAX_VALUE,
             (k, v) ->
             {
@@ -85,10 +85,10 @@ public class ValueDataSeriesTest
         Thread t = new Thread(r);
         t.start();
 
-        while (valueDataSeries.head() < 4)
+        while (inMemoryTimeSeries.head() < 4)
         {
             Entry entry = supplier.get();
-            valueDataSeries.append(entry.timestamp, entry.value);
+            inMemoryTimeSeries.append(entry.timestamp, entry.value);
         }
 
         try
@@ -96,7 +96,7 @@ public class ValueDataSeriesTest
             for (int i = 0; i < 1_000_000; i++)
             {
                 Entry entry = supplier.get();
-                valueDataSeries.append(entry.timestamp, entry.value);
+                inMemoryTimeSeries.append(entry.timestamp, entry.value);
             }
 
             fail("Should have thrown exception");
@@ -109,7 +109,7 @@ public class ValueDataSeriesTest
         try
         {
             Entry entry = supplier.get();
-            valueDataSeries.append(entry.timestamp, entry.value);
+            inMemoryTimeSeries.append(entry.timestamp, entry.value);
             fail("Should have thrown exception");
         }
         catch (RuntimeException e)
@@ -128,14 +128,14 @@ public class ValueDataSeriesTest
 
         Map<Long, Double> timestampToValue = Maps.mapOf(entries, (e, m) -> m.put(e.timestamp, e.value), HashMap::new);
 
-        valueDataSeries.load(n -> blocks);
+        inMemoryTimeSeries.load(n -> blocks);
 
         long queryStart = beginTimestamp + 10_000;
         long queryEnd = endTimestamp - 10_000;
 
         int[] count = { 0 };
 
-        valueDataSeries.query(
+        inMemoryTimeSeries.query(
             queryStart,
             queryEnd,
             (k, v) ->

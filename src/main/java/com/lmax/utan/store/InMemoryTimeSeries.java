@@ -2,17 +2,15 @@ package com.lmax.utan.store;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ValueDataSeries
+public class InMemoryTimeSeries
 {
-    private final int id;
-    private final int numBlocks;
     private final Block[] blocks;
     private final AtomicLong headBlock = new AtomicLong(0);
     private final AtomicLong tailForReseting = new AtomicLong(0);
     private final AtomicLong tailForReading = new AtomicLong(0);
     private final int maxActiveBlocks;
 
-    public ValueDataSeries(int id, int numBlocks)
+    public InMemoryTimeSeries(int numBlocks)
     {
         if (Integer.bitCount(numBlocks) != 1)
         {
@@ -23,8 +21,6 @@ public class ValueDataSeries
             throw new RuntimeException("numBlocks must at least 4");
         }
 
-        this.id = id;
-        this.numBlocks = numBlocks;
         this.blocks = Block.new4KDirectBlocks(numBlocks);
         this.maxActiveBlocks = (numBlocks / 4) * 3;
     }
