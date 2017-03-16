@@ -81,7 +81,7 @@ public class InMemoryTimeSeries
     }
 
 
-    public void query(long startTimestamp, long endTimestamp, Block.ValueConsumer consumer)
+    public void query(long startTimestamp, long endTimestamp, ValueConsumer consumer)
     {
         long head = headBlock.get();
         long tail = tailForReading.get();

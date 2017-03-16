@@ -532,11 +532,6 @@ public class Block
         return buffer.compareTo(other.buffer);
     }
 
-    public interface ValueConsumer
-    {
-        void accept(long timestamp, double value);
-    }
-
     static long compressBits(long value, int numBits)
     {
         return value & ((1 << (numBits - 1)) - 1) | ((value >>> 63) << (numBits - 1));

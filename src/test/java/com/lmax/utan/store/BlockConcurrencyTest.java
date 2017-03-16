@@ -123,7 +123,7 @@ public class BlockConcurrencyTest
         assertThat(total).isNotEqualTo(0);
     }
 
-    private class Verifier implements Block.ValueConsumer
+    private class Verifier implements ValueConsumer
     {
         private int counter = 0;
 

@@ -34,7 +34,7 @@ public class BlockReadBenchmark
         block.foreach(consumer);
     }
 
-    private static class PerfConsumer implements Block.ValueConsumer
+    private static class PerfConsumer implements ValueConsumer
     {
         private Blackhole blackhole;
 

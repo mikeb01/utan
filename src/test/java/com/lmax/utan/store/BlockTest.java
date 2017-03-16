@@ -21,9 +21,7 @@ public class BlockTest
     public void iterateOnEmptyBlock() throws Exception
     {
         final int[] c = { 0 };
-        b.foreach((t, v) -> {
-            c[0]++;
-        });
+        b.foreach((t, v) -> c[0]++);
 
         assertThat(c[0]).isEqualTo(0);
     }
@@ -194,7 +192,7 @@ public class BlockTest
         assertTimestampsAndValues(copy, entries);
     }
 
-    static void assertTimestampsAndValues(Block b, List<Entry> entries)
+    private void assertTimestampsAndValues(Block b, List<Entry> entries)
     {
         final Iterator<Entry> iterator = entries.iterator();
         final int index[] = { 0 };
