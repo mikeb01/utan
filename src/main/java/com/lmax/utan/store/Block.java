@@ -6,6 +6,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 
 import java.nio.ByteBuffer;
 import java.util.concurrent.Semaphore;
+import java.util.zip.CRC32;
 
 import static java.lang.Long.highestOneBit;
 import static java.lang.Long.numberOfTrailingZeros;
@@ -14,14 +15,17 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class Block
 {
-    private static final int HEADER_LENGTH = 128;
+    private static final int HEADER_LENGTH = 64;
     static final int COMPRESSED_DATA_START = HEADER_LENGTH + 128;
+    private static final int CRC_OFFSET = 4;
     private static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH / 8;
     private static final int FIRST_VALUE_OFFSET = FIRST_TIMESTAMP_OFFSET + 8;
     private static final int BYTE_LENGTH = 4096;
     private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
     private static final int INT_LENGTH = BYTE_LENGTH / 4;
     private static final int ALL_THE_LEASES = 1024;
+    private static final int FROZEN_BIT = 0b10000000_00000000_00000000_00000000;
+    private static final int BIT_LENGTH_MASK = 0x7FFFFFFF;
 
     private final AtomicBuffer buffer;
     private final Semaphore resetSemaphore = new Semaphore(ALL_THE_LEASES);
@@ -74,6 +78,11 @@ public class Block
 
     public int lengthInBits()
     {
+        return BIT_LENGTH_MASK & rawLengthInBits();
+    }
+
+    public int rawLengthInBits()
+    {
         return buffer.getIntVolatile(0);
     }
 
@@ -83,7 +92,15 @@ public class Block
 
     public synchronized boolean append(long timestamp, double val)
     {
-        int bitOffset = lengthInBits();
+        int bitOffset = rawLengthInBits();
+
+        if (isFrozen(bitOffset))
+        {
+            return false;
+        }
+
+        bitOffset &= 0x7FFFFFFF;
+
         if (bitOffset == HEADER_LENGTH)
         {
             appendInitial(timestamp, val);
@@ -613,5 +630,31 @@ public class Block
             ", lastValue=" + lastValue +
             ", lastXorValue=" + lastXorValue +
             '}';
+    }
+
+    public synchronized void freeze()
+    {
+        CRC32 crc32 = new CRC32();
+
+        for (int i = 0; i < 4; i++)
+        {
+            byte b = buffer.getByte(i);
+            crc32.update(0xFF & b);
+        }
+
+        for (int i = 8; i < 4096; i++)
+        {
+            byte b = buffer.getByte(i);
+            crc32.update(0xFF & b);
+        }
+
+        int crc = (int) crc32.getValue();
+        buffer.putInt(CRC_OFFSET, crc, BIG_ENDIAN);
+        setLengthInBits(lengthInBits() | FROZEN_BIT);
+    }
+
+    private boolean isFrozen(int bitOffset)
+    {
+        return (FROZEN_BIT & bitOffset) != 0;
     }
 }

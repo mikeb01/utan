@@ -178,6 +178,23 @@ public class BlockTest
         assertThat(toBinaryString(b.getTempPart(3))).isEqualTo("11000000000000000000000000000000");
     }
 
+    @Test
+    public void freezeBlockWithChecksum() throws Exception
+    {
+        TimeSeriesSupplier supplier = new TimeSeriesSupplier(11111);
+
+        for (int i = 0; i < 100; i++)
+        {
+            Entry entry = supplier.get();
+            b.append(entry.timestamp, entry.value);
+        }
+
+        b.freeze();
+
+        Entry entry = supplier.get();
+        assertThat(b.append(entry.timestamp, entry.value)).isFalse();
+    }
+
     private void assertWriteAndReadValues(long[] timestamps, double[] values)
     {
         final List<Entry> entries = new ArrayList<>(timestamps.length);
