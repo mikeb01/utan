@@ -13,7 +13,7 @@ public class BlockGenerator
         do
         {
             Entry entry = supplier.get();
-            if (!block.append(entry.timestamp, entry.value))
+            if (!block.append(entry.timestamp, entry.value).isOk())
             {
                 break;
             }

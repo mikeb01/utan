@@ -9,6 +9,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
+import static com.lmax.utan.store.Block.AppendStatus.FROZEN;
 import static java.lang.Integer.toBinaryString;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -140,7 +141,7 @@ public class BlockTest
             long timestamp = lastTimestamp + 1000 + (r.nextInt(100) - 50);
             double value = r.nextDouble() * 1000;
 
-            if(!b.append(timestamp, value))
+            if(!b.append(timestamp, value).isOk())
             {
                 break;
             }
@@ -192,7 +193,7 @@ public class BlockTest
         b.freeze();
 
         Entry entry = supplier.get();
-        assertThat(b.append(entry.timestamp, entry.value)).isFalse();
+        assertThat(b.append(entry.timestamp, entry.value)).isEqualTo(FROZEN);
     }
 
     private void assertWriteAndReadValues(long[] timestamps, double[] values)

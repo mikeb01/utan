@@ -43,7 +43,7 @@ public class BlockConcurrencyTest
             {
                 for (int i = 0; i < timestamps.length; i++)
                 {
-                    if (!block.append(timestamps[i], values[i]))
+                    if (!block.append(timestamps[i], values[i]).isOk())
                     {
                         break;
                     }
@@ -90,7 +90,7 @@ public class BlockConcurrencyTest
             {
                 for (int i = 0; i < timestamps.length; i++)
                 {
-                    if (!block.append(timestamps[i], values[i]))
+                    if (!block.append(timestamps[i], values[i]).isOk())
                     {
                         break;
                     }

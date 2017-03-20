@@ -40,6 +40,18 @@ public class Block
     private int temp2 = 0;
     private int temp3 = 0;
 
+    public enum AppendStatus
+    {
+        OK,
+        FULL,
+        FROZEN;
+
+        public boolean isOk()
+        {
+            return this == OK;
+        }
+    }
+
     public Block()
     {
         this(new UnsafeBuffer(new byte[4096]));
@@ -90,13 +102,13 @@ public class Block
     // Writing to the block
     // ====================
 
-    public synchronized boolean append(long timestamp, double val)
+    public synchronized AppendStatus append(long timestamp, double val)
     {
         int bitOffset = rawLengthInBits();
 
         if (isFrozen(bitOffset))
         {
-            return false;
+            return AppendStatus.FROZEN;
         }
 
         bitOffset &= 0x7FFFFFFF;
@@ -104,7 +116,7 @@ public class Block
         if (bitOffset == HEADER_LENGTH)
         {
             appendInitial(timestamp, val);
-            return true;
+            return AppendStatus.OK;
         }
         else
         {
@@ -133,7 +145,7 @@ public class Block
         lastValue = val;
     }
 
-    private boolean appendCompressed(int bufferBitIndex, long timestamp, double val)
+    private AppendStatus appendCompressed(int bufferBitIndex, long timestamp, double val)
     {
         resetBitBuffer();
 
@@ -187,7 +199,7 @@ public class Block
 
         if (newBitLength > BIT_LENGTH_LIMIT)
         {
-            return false;
+            return AppendStatus.FULL;
         }
 
         flushTemp(bufferBitIndex, totalBitsAdded);
@@ -199,7 +211,7 @@ public class Block
 
         setLengthInBits(newBitLength);
 
-        return true;
+        return AppendStatus.OK;
     }
 
     private int appendZeroTimestampDelta()

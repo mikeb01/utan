@@ -43,7 +43,7 @@ public class InMemoryTimeSeries
             head = headBlock.incrementAndGet() - 1;
         }
 
-        if (!blocks[indexOf(head)].append(timestamp, value))
+        if (!blocks[indexOf(head)].append(timestamp, value).isOk())
         {
             final long nextHead = head + 1;
 
@@ -56,7 +56,7 @@ public class InMemoryTimeSeries
             {
                 headBlock.incrementAndGet();
 
-                if (!blocks[indexOf(nextHead)].append(timestamp, value))
+                if (!blocks[indexOf(nextHead)].append(timestamp, value).isOk())
                 {
                     throw new RuntimeException("WAT");
                 }

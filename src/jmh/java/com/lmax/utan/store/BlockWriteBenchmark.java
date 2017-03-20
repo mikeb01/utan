@@ -48,7 +48,7 @@ public class BlockWriteBenchmark
             long timestamp = timestamps[i % (1024 - 1)];
             double value = values[i % (1024 - 1)];
 
-            appended = block.append(timestamp, value);
+            appended = block.append(timestamp, value).isOk();
         }
     }
 
