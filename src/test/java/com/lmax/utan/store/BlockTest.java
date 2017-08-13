@@ -194,6 +194,7 @@ public class BlockTest
 
         Entry entry = supplier.get();
         assertThat(b.append(entry.timestamp, entry.value)).isEqualTo(FROZEN);
+        assertThat(b.isFrozen()).isTrue();
     }
 
     private void assertWriteAndReadValues(long[] timestamps, double[] values)

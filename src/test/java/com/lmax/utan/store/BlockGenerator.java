@@ -7,6 +7,13 @@ public class BlockGenerator
 {
     public static void generateBlockData(
         final Supplier<Entry> supplier,
+        final Block block)
+    {
+        generateBlockData(supplier, block, null);
+    }
+
+    public static List<Entry> generateBlockData(
+        final Supplier<Entry> supplier,
         final Block block,
         final List<Entry> entries)
     {
@@ -18,8 +25,13 @@ public class BlockGenerator
                 break;
             }
 
-            entries.add(entry);
+            if (null != entries)
+            {
+                entries.add(entry);
+            }
         }
         while (true);
+
+        return entries;
     }
 }

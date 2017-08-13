@@ -1,10 +1,13 @@
 package com.lmax.utan.store;
 
 import org.agrona.BitUtil;
+import org.agrona.DirectBuffer;
 import org.agrona.concurrent.AtomicBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.zip.CRC32;
 
@@ -18,9 +21,9 @@ public class Block
     private static final int HEADER_LENGTH = 64;
     static final int COMPRESSED_DATA_START = HEADER_LENGTH + 128;
     private static final int CRC_OFFSET = 4;
-    private static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH / 8;
+    public static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH / 8;
     private static final int FIRST_VALUE_OFFSET = FIRST_TIMESTAMP_OFFSET + 8;
-    private static final int BYTE_LENGTH = 4096;
+    public static final int BYTE_LENGTH = 4096;
     private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
     private static final int INT_LENGTH = BYTE_LENGTH / 4;
     private static final int ALL_THE_LEASES = 1024;
@@ -39,6 +42,12 @@ public class Block
     private int temp1 = 0;
     private int temp2 = 0;
     private int temp3 = 0;
+
+    public ByteBuffer underlyingBuffer()
+    {
+        ByteBuffer byteBuffer = buffer.byteBuffer();
+        return byteBuffer == null ? ByteBuffer.wrap(buffer.byteArray()) : byteBuffer;
+    }
 
     public enum AppendStatus
     {
@@ -63,9 +72,19 @@ public class Block
         reset();
     }
 
+    public static long getFirstTimestamp(DirectBuffer buffer)
+    {
+        return buffer.getLong(FIRST_TIMESTAMP_OFFSET, ByteOrder.BIG_ENDIAN);
+    }
+
     public static Block new4kHeapBlock()
     {
         return new Block(new UnsafeBuffer(new byte[4096]));
+    }
+
+    public static Block new4kDirectBlock()
+    {
+        return new Block(new UnsafeBuffer(ByteBuffer.allocateDirect(4096)));
     }
 
     public static Block[] new4KDirectBlocks(int n)
@@ -81,6 +100,11 @@ public class Block
         }
 
         return blocks;
+    }
+
+    public boolean isFrozen()
+    {
+        return (~BIT_LENGTH_MASK & rawLengthInBits()) != 0;
     }
 
     private void setLengthInBits(int length)
@@ -132,6 +156,18 @@ public class Block
     public long firstTimestamp()
     {
         return buffer.getLong(FIRST_TIMESTAMP_OFFSET, BIG_ENDIAN);
+    }
+
+    /**
+     * Be careful with this method, it is O(n) and allocates.
+     *
+     * @return the last recorded timestamp in this block
+     */
+    public long lastTimestamp()
+    {
+        long[] lastTimestamp = {0};
+        foreach((timestamp, value) -> lastTimestamp[0] = timestamp);
+        return lastTimestamp[0];
     }
 
     private void appendInitial(long timestamp, double val)
@@ -668,5 +704,29 @@ public class Block
     private boolean isFrozen(int bitOffset)
     {
         return (FROZEN_BIT & bitOffset) != 0;
+    }
+
+    @Override
+    public boolean equals(Object o)
+    {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Block block = (Block) o;
+
+        for (int i = 0; i < BYTE_LENGTH; i += 8)
+        {
+            if (buffer.getLong(i) != block.buffer.getLong(i))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return Long.hashCode(firstTimestamp());
     }
 }

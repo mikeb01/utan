@@ -38,4 +38,14 @@ public class TimeSeriesSupplier implements Supplier<Entry>
 
         return new Entry(lastTimestamp, value);
     }
+
+    public long getLastTimestamp()
+    {
+        return lastTimestamp;
+    }
+
+    public long getBeginTimestamp()
+    {
+        return beginTimestamp;
+    }
 }

@@ -1,10 +1,10 @@
 package com.lmax.utan.parser;
 
-import javolution.text.TypeFormat;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+
+import static com.lmax.collection.Parse.parseLong;
 
 public class LineParser
 {
@@ -158,7 +158,7 @@ public class LineParser
                 }
                 else if (isEndLine(c))
                 {
-                    final long timestamp = TypeFormat.parseLong(builder);
+                    final long timestamp = parseLong(builder, 10);
                     callback.onTimestamp(timestamp);
                     state = State.PRE_KEY;
                     callback.onComplete();
@@ -166,7 +166,7 @@ public class LineParser
                 }
                 else if (isWhiteSpace(c))
                 {
-                    final long timestamp = TypeFormat.parseLong(builder);
+                    final long timestamp = parseLong(builder, 10);
                     callback.onTimestamp(timestamp);
                     state = State.PRE_TAG;
                     builder.setLength(0);

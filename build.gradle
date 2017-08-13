@@ -29,7 +29,8 @@ dependencies {
     testCompile 'org.quicktheories:quicktheories:0.13'
     compile 'org.agrona:Agrona:0.5'
     compile 'io.netty:netty-all:4.1.4.Final'
-    compile 'org.javolution:javolution-core-java:6.0.0'
+//    compile 'org.javolution:javolution-core-java:6.0.0'
+    compile 'org.reactivestreams:reactive-streams:1.0.0'
 }
 
 apply plugin: "idea"
