@@ -23,7 +23,6 @@ import static org.junit.Assert.fail;
 public class OffHeapMemoryTimeSeriesTest
 {
     private final OffHeapMemoryTimeSeries inMemoryTimeSeries = OffHeapMemoryTimeSeries.create(4, new File("/dev/shm/barkerm/utan").toPath());
-    private Random random = new Random(27364L);
 
     public OffHeapMemoryTimeSeriesTest() throws IOException
     {

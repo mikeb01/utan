@@ -1,5 +1,6 @@
 package com.lmax.utan.store;
 
+import com.lmax.collection.Strings;
 import com.lmax.io.Dirs;
 
 import java.io.File;
@@ -8,42 +9,22 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.util.HashSet;
+import java.util.EnumSet;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-import static com.lmax.collection.Sets.setOf;
-import static com.lmax.io.Dirs.ensureDirExists;
-import static java.lang.ThreadLocal.withInitial;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.util.stream.Collectors.toSet;
 
 public class PersistentStoreReader
 {
-    private static final Set<String> VALID_DAYS = IntStream.range(1, 32).mapToObj(PersistentStoreReader::lPad2).collect(toSet());
-    private static final Set<String> VALID_MONTHS = IntStream.range(1, 12).mapToObj(PersistentStoreReader::lPad2).collect(toSet());
-    private static final Set<String> VALID_YEARS = IntStream.range(2012, 2013).mapToObj(PersistentStoreReader::lPad2).collect(toSet());
-    private static final Set<? extends OpenOption> OPEN_OPTIONS = setOf(new HashSet<>(), READ);
+    private static final Set<String> VALID_DAYS = IntStream.range(1, 32).mapToObj(Strings::lPad2).collect(toSet());
+    private static final Set<String> VALID_MONTHS = IntStream.range(1, 12).mapToObj(Strings::lPad2).collect(toSet());
+    private static final Set<String> VALID_YEARS = IntStream.range(2012, 2112).mapToObj(Strings::lPad2).collect(toSet());
+
+    private static final Set<? extends OpenOption> READ_ONLY_OPTIONS = EnumSet.of(READ);
 
     private final File dir;
-
-    private final ThreadLocal<MessageDigest> messageDigestLocal = withInitial(
-        () ->
-        {
-            try
-            {
-                return MessageDigest.getInstance("SHA-1");
-            }
-            catch (NoSuchAlgorithmException e)
-            {
-                throw new RuntimeException(e);
-            }
-        });
 
     public PersistentStoreReader(File dir)
     {
@@ -53,22 +34,21 @@ public class PersistentStoreReader
     public Block findBlockContainingTimestamp(CharSequence key, long timestamp) throws IOException
     {
         byte[] keyAsBytes = key.toString().getBytes(StandardCharsets.UTF_8);
-        File keyDir = PersistentStore.getKeyDir(keyAsBytes, false, messageDigestLocal.get(), dir);
+        File keyDir = PersistentStore.getKeyDir(keyAsBytes, false, dir);
 
         if (!keyDir.exists())
         {
             throw new NoSuchFileException("Key directory: " + keyDir.toString());
         }
 
-        final LocalDate date = Instant.ofEpochMilli(timestamp).atOffset(ZoneOffset.UTC).toLocalDate();
-        File timeDir = getTimeDir(keyDir, date, false);
+        File timeDir = PersistentStore.getTimeDir(keyDir, timestamp, false);
 
         if (!timeDir.exists())
         {
             timeDir = nextDir(timeDir);
         }
 
-        try (FileChannel timeSeries = getChannel(timeDir))
+        try (FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_ONLY_OPTIONS))
         {
             if (timeSeries.size() < Block.BYTE_LENGTH)
             {
@@ -105,7 +85,7 @@ public class PersistentStoreReader
 
             if (nextTimeDir != null)
             {
-                try (FileChannel nextTimeSeries = getChannel(nextTimeDir))
+                try (FileChannel nextTimeSeries = PersistentStore.getTimeSeriesChannel(nextTimeDir, READ_ONLY_OPTIONS))
                 {
                     if (nextTimeSeries.size() > 0)
                     {
@@ -115,7 +95,6 @@ public class PersistentStoreReader
             }
         }
 
-        // TODO: Find next timeseries.
         throw new IOException("Request out of range");
     }
 
@@ -166,30 +145,4 @@ public class PersistentStoreReader
         return block;
     }
 
-    private FileChannel getChannel(File timeDir) throws IOException
-    {
-        File timeSeriesFile = new File(timeDir, "timeseries.dat");
-        return FileChannel.open(timeSeriesFile.toPath(), OPEN_OPTIONS);
-    }
-
-    private File getTimeDir(File keyDir, LocalDate offsetDateTime, boolean createIfNotExists) throws IOException
-    {
-        String year = String.valueOf(offsetDateTime.getYear());
-        String month = lPad2(offsetDateTime.getMonth().getValue());
-        String day = lPad2(offsetDateTime.getDayOfMonth());
-
-        File timePath = keyDir.toPath().resolve(year).resolve(month).resolve(day).toFile();
-        if (createIfNotExists)
-        {
-            ensureDirExists(timePath);
-        }
-
-        return timePath;
-    }
-
-    private static String lPad2(int value)
-    {
-        String pad = value < 10 ? "0" : "";
-        return pad + value;
-    }
 }
