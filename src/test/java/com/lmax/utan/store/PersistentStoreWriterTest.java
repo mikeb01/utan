@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -92,6 +93,30 @@ public class PersistentStoreWriterTest
     }
 
     @Test
+    public void findBlockOnNextDayWithNoDataOnCurrentDay() throws Exception
+    {
+        final Block block0 = Block.new4kHeapBlock();
+        List<Entry> firstDayEntries = generateBlockData(timeSeriesSupplier, block0, new ArrayList<>());
+
+        final Block block1 = Block.new4kHeapBlock();
+        long futureTimestamp = timestamp2DayInFuture(firstDayEntries);
+        TimeSeriesSupplier timeSeriesSupplier = new TimeSeriesSupplier(1234234, futureTimestamp);
+        List<Entry> futureDayEntries = generateBlockData(timeSeriesSupplier, block1, new ArrayList<>());
+
+        long midTimestamp = asZonedDateTime(firstDayEntries).plusDays(1).toInstant().toEpochMilli();
+        PersistentStoreWriter toStore = new PersistentStoreWriter(dir);
+        PersistentStoreReader toLoad = new PersistentStoreReader(dir);
+
+        toStore.store(key, block0);
+        toStore.store(key, block1);
+
+        Block block = toLoad.findBlockContainingTimestamp(key, midTimestamp);
+
+        assertThat(block.firstTimestamp()).isEqualTo(futureDayEntries.get(0).timestamp);
+        assertThat(block.lastTimestamp()).isEqualTo(futureDayEntries.get(futureDayEntries.size() - 1).timestamp);
+    }
+
+    @Test
     public void findBlockOnNextMonth() throws Exception
     {
         final Block block0 = Block.new4kHeapBlock();
@@ -116,15 +141,16 @@ public class PersistentStoreWriterTest
 
     private long timestamp2DayInFuture(List<Entry> firstDayEntries)
     {
-        ZonedDateTime utc = ZonedDateTime.ofInstant(Instant.ofEpochMilli(firstDayEntries.get(firstDayEntries.size() - 1).timestamp), ZoneId.of("UTC"));
-        ZonedDateTime in2DaysTime = utc.plusDays(2);
-        return in2DaysTime.toInstant().toEpochMilli();
+        return asZonedDateTime(firstDayEntries).plusDays(2).toInstant().toEpochMilli();
     }
 
     private long timestamp1MonthInFuture(List<Entry> firstDayEntries)
     {
-        ZonedDateTime utc = ZonedDateTime.ofInstant(Instant.ofEpochMilli(firstDayEntries.get(firstDayEntries.size() - 1).timestamp), ZoneId.of("UTC"));
-        ZonedDateTime in2DaysTime = utc.plusMonths(1);
-        return in2DaysTime.toInstant().toEpochMilli();
+        return asZonedDateTime(firstDayEntries).plusMonths(1).toInstant().toEpochMilli();
+    }
+
+    private ZonedDateTime asZonedDateTime(List<Entry> firstDayEntries)
+    {
+        return ZonedDateTime.ofInstant(Instant.ofEpochMilli(firstDayEntries.get(firstDayEntries.size() - 1).timestamp), ZoneId.of("UTC"));
     }
 }

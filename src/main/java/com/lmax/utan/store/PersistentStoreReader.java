@@ -63,10 +63,9 @@ public class PersistentStoreReader
         final LocalDate date = Instant.ofEpochMilli(timestamp).atOffset(ZoneOffset.UTC).toLocalDate();
         File timeDir = getTimeDir(keyDir, date, false);
 
-        // TODO: Find next time series
         if (!timeDir.exists())
         {
-            throw new NoSuchFileException("Time Directory: " + timeDir);
+            timeDir = nextDir(timeDir);
         }
 
         try (FileChannel timeSeries = getChannel(timeDir))
