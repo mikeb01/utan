@@ -1,6 +1,5 @@
 package com.lmax.utan.store;
 
-import org.agrona.concurrent.UnsafeBuffer;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -14,7 +13,7 @@ public class BlockConcurrencyTest
     private final long[] timestamps = new long[1024];
     private final double[] values = new double[1024];
     private final Random r = new Random(87324);
-    private final Block block = new Block(new UnsafeBuffer(new byte[4096]));
+    private final Block block = Block.newHeapBlock();
 
     @Before
     public void setUp()

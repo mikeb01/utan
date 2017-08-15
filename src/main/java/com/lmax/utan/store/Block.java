@@ -1,13 +1,10 @@
 package com.lmax.utan.store;
 
 import org.agrona.BitUtil;
-import org.agrona.DirectBuffer;
 import org.agrona.concurrent.AtomicBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.zip.CRC32;
 
@@ -18,10 +15,10 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class Block
 {
-    private static final int HEADER_LENGTH = 64;
-    static final int COMPRESSED_DATA_START = HEADER_LENGTH + 128;
+    private static final int HEADER_LENGTH_BITS = 64;
     private static final int CRC_OFFSET = 4;
-    public static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH / 8;
+    static final int COMPRESSED_DATA_START_BITS = HEADER_LENGTH_BITS + 128;
+    private static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH_BITS / 8;
     private static final int FIRST_VALUE_OFFSET = FIRST_TIMESTAMP_OFFSET + 8;
     public static final int BYTE_LENGTH = 4096;
     private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
@@ -63,7 +60,7 @@ public class Block
 
     public Block()
     {
-        this(new UnsafeBuffer(new byte[4096]));
+        this(new UnsafeBuffer(new byte[BYTE_LENGTH]));
     }
 
     public Block(AtomicBuffer buffer)
@@ -72,19 +69,14 @@ public class Block
         reset();
     }
 
-    public static long getFirstTimestamp(DirectBuffer buffer)
+    public static Block newHeapBlock()
     {
-        return buffer.getLong(FIRST_TIMESTAMP_OFFSET, ByteOrder.BIG_ENDIAN);
+        return new Block(new UnsafeBuffer(new byte[BYTE_LENGTH]));
     }
 
-    public static Block new4kHeapBlock()
+    public static Block newDirectBlock()
     {
-        return new Block(new UnsafeBuffer(new byte[4096]));
-    }
-
-    public static Block new4kDirectBlock()
-    {
-        return new Block(new UnsafeBuffer(ByteBuffer.allocateDirect(4096)));
+        return new Block(new UnsafeBuffer(ByteBuffer.allocateDirect(BYTE_LENGTH)));
     }
 
     public static Block[] new4KDirectBlocks(int n)
@@ -137,7 +129,7 @@ public class Block
 
         bitOffset &= 0x7FFFFFFF;
 
-        if (bitOffset == HEADER_LENGTH)
+        if (bitOffset == HEADER_LENGTH_BITS)
         {
             appendInitial(timestamp, val);
             return AppendStatus.OK;
@@ -150,7 +142,7 @@ public class Block
 
     public boolean isEmpty()
     {
-        return lengthInBits() == HEADER_LENGTH;
+        return lengthInBits() == HEADER_LENGTH_BITS;
     }
 
     public long firstTimestamp()
@@ -174,7 +166,7 @@ public class Block
     {
         buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BIG_ENDIAN);
         buffer.putDouble(FIRST_VALUE_OFFSET, val, BIG_ENDIAN);
-        setLengthInBits(COMPRESSED_DATA_START);
+        setLengthInBits(COMPRESSED_DATA_START_BITS);
 
         tMinusOne = timestamp;
         tMinusTwo = timestamp;
@@ -440,7 +432,7 @@ public class Block
     {
         int lengthInBits = lengthInBits();
 
-        if (lengthInBits <= HEADER_LENGTH)
+        if (lengthInBits <= HEADER_LENGTH_BITS)
         {
             return 0;
         }
@@ -454,7 +446,7 @@ public class Block
         long tMinusOne = timestamp;
         long tMinusTwo = timestamp;
 
-        int bitOffset = HEADER_LENGTH + ((BitUtil.SIZE_OF_LONG + BitUtil.SIZE_OF_LONG) * 8);
+        int bitOffset = HEADER_LENGTH_BITS + ((BitUtil.SIZE_OF_LONG + BitUtil.SIZE_OF_LONG) * 8);
 
         int count = 1;
         while (bitOffset < lengthInBits)
@@ -585,13 +577,13 @@ public class Block
         {
             try
             {
-                buffer.setMemory(0, 4096, (byte) 0);
+                buffer.setMemory(0, BYTE_LENGTH, (byte) 0);
                 tMinusOne = 0;
                 tMinusTwo = 0;
                 lastValue = 0.0;
                 lastXorValue = 0;
 
-                setLengthInBits(HEADER_LENGTH);
+                setLengthInBits(HEADER_LENGTH_BITS);
             }
             finally
             {
@@ -643,7 +635,7 @@ public class Block
             try
             {
                 final int bitLength = lengthInBits();
-                buffer.getBytes(0, block.buffer, 0, 4096);
+                buffer.getBytes(0, block.buffer, 0, BYTE_LENGTH);
 
                 block.setLengthInBits(bitLength);
                 block.zeroRemaining();
@@ -690,7 +682,7 @@ public class Block
             crc32.update(0xFF & b);
         }
 
-        for (int i = 8; i < 4096; i++)
+        for (int i = 8; i < BYTE_LENGTH; i++)
         {
             byte b = buffer.getByte(i);
             crc32.update(0xFF & b);

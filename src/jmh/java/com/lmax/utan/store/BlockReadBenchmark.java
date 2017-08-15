@@ -12,8 +12,7 @@ import java.util.Random;
 @State(Scope.Benchmark)
 public class BlockReadBenchmark
 {
-    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[4096]);
-    private final Block block = new Block(buffer);
+    private final Block block = Block.newHeapBlock();
     private PerfConsumer consumer = new PerfConsumer();
 
     @Setup

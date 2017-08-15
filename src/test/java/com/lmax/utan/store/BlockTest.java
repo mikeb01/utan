@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
 {
-    private final Block b = new Block(new UnsafeBuffer(new byte[4096]));
-    private final Block copy = new Block(new UnsafeBuffer(new byte[4096]));
+    private final Block b = Block.newHeapBlock();
+    private final Block copy = Block.newHeapBlock();
 
     @Test
     public void iterateOnEmptyBlock() throws Exception
@@ -39,7 +39,7 @@ public class BlockTest
         double[] values = { val };
 
         assertWriteAndReadValues(timestamps, values);
-        assertThat(b.lengthInBits()).isEqualTo(Block.COMPRESSED_DATA_START);
+        assertThat(b.lengthInBits()).isEqualTo(Block.COMPRESSED_DATA_START_BITS);
         assertThat(b.firstTimestamp()).isEqualTo(timestamp);
     }
 

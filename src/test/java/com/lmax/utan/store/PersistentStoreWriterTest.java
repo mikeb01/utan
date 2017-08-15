@@ -6,7 +6,6 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -36,7 +35,7 @@ public class PersistentStoreWriterTest
         PersistentStoreReader reader = new PersistentStoreReader(dir);
         PersistentStoreWriter writer = new PersistentStoreWriter(dir);
 
-        final Block blockToStore = Block.new4kHeapBlock();
+        final Block blockToStore = Block.newHeapBlock();
         generateBlockData(timeSeriesSupplier, blockToStore);
 
         String key = "foo";
@@ -54,7 +53,7 @@ public class PersistentStoreWriterTest
     @Test
     public void storeAndLoadSingleBlock() throws Exception
     {
-        final Block blockToStore = Block.new4kHeapBlock();
+        final Block blockToStore = Block.newHeapBlock();
         ArrayList<Entry> entries = new ArrayList<>();
         generateBlockData(timeSeriesSupplier, blockToStore, entries);
 
@@ -72,10 +71,10 @@ public class PersistentStoreWriterTest
     @Test
     public void findBlockOnNextDay() throws Exception
     {
-        final Block block0 = Block.new4kHeapBlock();
+        final Block block0 = Block.newHeapBlock();
         List<Entry> firstDayEntries = generateBlockData(timeSeriesSupplier, block0, new ArrayList<>());
 
-        final Block block1 = Block.new4kHeapBlock();
+        final Block block1 = Block.newHeapBlock();
         long futureTimestamp = timestamp2DayInFuture(firstDayEntries);
         TimeSeriesSupplier timeSeriesSupplier = new TimeSeriesSupplier(1234234, futureTimestamp);
         List<Entry> futureDayEntries = generateBlockData(timeSeriesSupplier, block1, new ArrayList<>());
@@ -95,10 +94,10 @@ public class PersistentStoreWriterTest
     @Test
     public void findBlockOnNextDayWithNoDataOnCurrentDay() throws Exception
     {
-        final Block block0 = Block.new4kHeapBlock();
+        final Block block0 = Block.newHeapBlock();
         List<Entry> firstDayEntries = generateBlockData(timeSeriesSupplier, block0, new ArrayList<>());
 
-        final Block block1 = Block.new4kHeapBlock();
+        final Block block1 = Block.newHeapBlock();
         long futureTimestamp = timestamp2DayInFuture(firstDayEntries);
         TimeSeriesSupplier timeSeriesSupplier = new TimeSeriesSupplier(1234234, futureTimestamp);
         List<Entry> futureDayEntries = generateBlockData(timeSeriesSupplier, block1, new ArrayList<>());
@@ -119,10 +118,10 @@ public class PersistentStoreWriterTest
     @Test
     public void findBlockOnNextMonth() throws Exception
     {
-        final Block block0 = Block.new4kHeapBlock();
+        final Block block0 = Block.newHeapBlock();
         List<Entry> firstDayEntries = generateBlockData(timeSeriesSupplier, block0, new ArrayList<>());
 
-        final Block block1 = Block.new4kHeapBlock();
+        final Block block1 = Block.newHeapBlock();
         long futureTimestamp = timestamp1MonthInFuture(firstDayEntries);
         TimeSeriesSupplier timeSeriesSupplier = new TimeSeriesSupplier(1234234, futureTimestamp);
         List<Entry> futureDayEntries = generateBlockData(timeSeriesSupplier, block1, new ArrayList<>());

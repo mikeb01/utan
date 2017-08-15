@@ -32,7 +32,7 @@ public class PersistentStore
             }
         });
 
-    static File getKeyDir(byte[] keyAsBytes, boolean createIfNotExists, File parent) throws IOException
+    static File getKeyDir(File parent, byte[] keyAsBytes, boolean createIfNotExists) throws IOException
     {
         final MessageDigest sha1Digest = MESSAGE_DIGEST_LOCAL.get();
 

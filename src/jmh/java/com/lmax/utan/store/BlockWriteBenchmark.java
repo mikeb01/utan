@@ -14,8 +14,7 @@ public class BlockWriteBenchmark
 {
     private final long[] timestamps = new long[1024];
     private final double[] values = new double[1024];
-    private final UnsafeBuffer buffer = new UnsafeBuffer(new byte[4096]);
-    private final Block block = new Block(buffer);
+    private final Block block = Block.newHeapBlock();
 
     @Setup
     public void setUp()

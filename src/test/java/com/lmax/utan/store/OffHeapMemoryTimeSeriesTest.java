@@ -9,11 +9,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Supplier;
 
-import static com.lmax.utan.store.Block.new4kHeapBlock;
+import static com.lmax.utan.store.Block.newHeapBlock;
 import static com.lmax.utan.store.BlockGenerator.generateBlockData;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
@@ -32,7 +31,7 @@ public class OffHeapMemoryTimeSeriesTest
     public void returnValuesWithinSingleBlock() throws Exception
     {
         final List<Entry> entries = new ArrayList<>();
-        final Block b = new4kHeapBlock();
+        final Block b = newHeapBlock();
 
         TimeSeriesSupplier supplier = new TimeSeriesSupplier(54321L);
 
@@ -45,8 +44,8 @@ public class OffHeapMemoryTimeSeriesTest
     public void returnValuesSpanningTwoBlocks() throws Exception
     {
         final List<Entry> entries = new ArrayList<>();
-        final Block b1 = new4kHeapBlock();
-        final Block b2 = new4kHeapBlock();
+        final Block b1 = newHeapBlock();
+        final Block b2 = newHeapBlock();
 
         TimeSeriesSupplier supplier = new TimeSeriesSupplier(12345L);
         generateBlockData(supplier, b1, entries);

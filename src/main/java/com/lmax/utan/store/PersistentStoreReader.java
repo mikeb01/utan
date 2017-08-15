@@ -34,7 +34,7 @@ public class PersistentStoreReader
     public Block findBlockContainingTimestamp(CharSequence key, long timestamp) throws IOException
     {
         byte[] keyAsBytes = key.toString().getBytes(StandardCharsets.UTF_8);
-        File keyDir = PersistentStore.getKeyDir(keyAsBytes, false, dir);
+        File keyDir = PersistentStore.getKeyDir(dir, keyAsBytes, false);
 
         if (!keyDir.exists())
         {
@@ -48,6 +48,11 @@ public class PersistentStoreReader
             timeDir = nextDir(timeDir);
         }
 
+        if (null == timeDir || !timeDir.exists())
+        {
+            throw new IOException("No data available");
+        }
+
         try (FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_ONLY_OPTIONS))
         {
             if (timeSeries.size() < Block.BYTE_LENGTH)
@@ -55,7 +60,7 @@ public class PersistentStoreReader
                 throw new IOException("No data in time series: " + timeSeries);
             }
 
-            Block block = Block.new4kDirectBlock();
+            Block block = Block.newDirectBlock();
             long previousPosition = 0;
             long currentPosition = 0;
 

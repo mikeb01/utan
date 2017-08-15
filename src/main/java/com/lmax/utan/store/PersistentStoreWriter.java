@@ -9,9 +9,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -44,7 +41,7 @@ public class PersistentStoreWriter
     {
         byte[] keyAsBytes = key.toString().getBytes(StandardCharsets.UTF_8);
 
-        File keyDir = PersistentStore.getKeyDir(keyAsBytes, true, this.dir);
+        File keyDir = PersistentStore.getKeyDir(this.dir, keyAsBytes, true);
         ensureKeyFileExists(keyDir, keyAsBytes);
 
         File timeDir = PersistentStore.getTimeDir(keyDir, block.firstTimestamp(), true);

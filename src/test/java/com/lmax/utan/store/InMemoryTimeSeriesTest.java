@@ -8,10 +8,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.function.Supplier;
 
-import static com.lmax.utan.store.Block.new4kHeapBlock;
+import static com.lmax.utan.store.Block.newHeapBlock;
 import static com.lmax.utan.store.BlockGenerator.generateBlockData;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
@@ -27,7 +29,7 @@ public class InMemoryTimeSeriesTest
     public void returnValuesWithinSingleBlock() throws Exception
     {
         final List<Entry> entries = new ArrayList<>();
-        final Block b = new4kHeapBlock();
+        final Block b = newHeapBlock();
 
         TimeSeriesSupplier supplier = new TimeSeriesSupplier(54321L);
 
@@ -40,8 +42,8 @@ public class InMemoryTimeSeriesTest
     public void returnValuesSpanningTwoBlocks() throws Exception
     {
         final List<Entry> entries = new ArrayList<>();
-        final Block b1 = new4kHeapBlock();
-        final Block b2 = new4kHeapBlock();
+        final Block b1 = newHeapBlock();
+        final Block b2 = newHeapBlock();
 
         TimeSeriesSupplier supplier = new TimeSeriesSupplier(12345L);
         generateBlockData(supplier, b1, entries);
@@ -68,6 +70,11 @@ public class InMemoryTimeSeriesTest
         Supplier<Entry> supplier = new TimeSeriesSupplier(67890);
         CountDownLatch latch = new CountDownLatch(1);
 
+        {
+            Entry entry = supplier.get();
+            inMemoryTimeSeries.append(entry.timestamp, entry.value);
+        }
+
         Runnable r = () -> inMemoryTimeSeries.query(
             0, Long.MAX_VALUE,
             (k, v) ->
@@ -78,11 +85,12 @@ public class InMemoryTimeSeriesTest
                 }
                 catch (InterruptedException e)
                 {
-                    // No-op
+                    throw new RuntimeException(e);
                 }
             });
 
         Thread t = new Thread(r);
+        t.setName("foo");
         t.start();
 
         while (inMemoryTimeSeries.head() < 4)
