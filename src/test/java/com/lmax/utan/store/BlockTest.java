@@ -109,7 +109,6 @@ public class BlockTest
 
             lastTimestamp = timestamps[i];
             lastValue = values[i];
-
         }
 
         assertWriteAndReadValues(timestamps, values);
@@ -201,18 +200,26 @@ public class BlockTest
     {
         final List<Entry> entries = new ArrayList<>(timestamps.length);
 
-        for (int i = 0; i < timestamps.length; i++)
+        int numWritten = 0;
+        for (; numWritten < timestamps.length; )
         {
-            b.append(timestamps[i], values[i]);
-            entries.add(new Entry(timestamps[i], values[i]));
+            if (b.append(timestamps[numWritten], values[numWritten]).isOk())
+            {
+                entries.add(new Entry(timestamps[numWritten], values[numWritten]));
+                numWritten++;
+            }
+            else
+            {
+                break;
+            }
         }
 
         b.copyTo(copy);
 
         assertThat(b.compareTo(copy)).isEqualTo(0);
 
-        assertTimestampsAndValues(b, entries);
-        assertTimestampsAndValues(copy, entries);
+        assertTimestampsAndValues(b, entries.subList(0, numWritten));
+        assertTimestampsAndValues(copy, entries.subList(0, numWritten));
     }
 
     private void assertTimestampsAndValues(Block b, List<Entry> entries)
@@ -220,7 +227,7 @@ public class BlockTest
         final Iterator<Entry> iterator = entries.iterator();
         final int index[] = { 0 };
 
-        b.foreach((t, v) -> {
+        int count = b.foreach((t, v) -> {
             final Entry entry = iterator.next();
             assertThat(t).isEqualTo(entry.timestamp);
             assertThat(v).isEqualTo(entry.value);
@@ -229,6 +236,7 @@ public class BlockTest
         });
 
         assertThat(index[0]).isEqualTo(entries.size());
+        assertThat(count).isEqualTo(entries.size());
     }
 
 }

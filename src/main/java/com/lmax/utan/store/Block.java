@@ -15,12 +15,12 @@ import static java.nio.ByteOrder.BIG_ENDIAN;
 
 public class Block
 {
+    public static final int BYTE_LENGTH = 512;
     private static final int HEADER_LENGTH_BITS = 64;
     private static final int CRC_OFFSET = 4;
     static final int COMPRESSED_DATA_START_BITS = HEADER_LENGTH_BITS + 128;
     private static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH_BITS / 8;
     private static final int FIRST_VALUE_OFFSET = FIRST_TIMESTAMP_OFFSET + 8;
-    public static final int BYTE_LENGTH = 4096;
     private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
     private static final int INT_LENGTH = BYTE_LENGTH / 4;
     private static final int ALL_THE_LEASES = 1024;
@@ -257,7 +257,7 @@ public class Block
         return markerBitLength + numBits;
     }
 
-    private int appendZeroValueXor(int i)
+    private int appendZeroValueXor(@SuppressWarnings("unused") int i)
     {
         return 1;
     }
