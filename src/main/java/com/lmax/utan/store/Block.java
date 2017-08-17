@@ -489,7 +489,7 @@ public class Block
                 throw new IllegalStateException("Data Corrupt");
             }
 
-            timestamp =  delta + (tMinusOne - tMinusTwo) + tMinusOne;
+            timestamp = delta + (tMinusOne - tMinusTwo) + tMinusOne;
             tMinusTwo = tMinusOne;
             tMinusOne = timestamp;
 
