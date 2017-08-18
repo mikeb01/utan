@@ -16,7 +16,7 @@ public class TimeSeriesStore
 
     public void store(String name, long timestamp, double value) throws IOException
     {
-        long day = timestamp / (24 * 60 * 60);
+        long day = getDay(timestamp);
 
         final CurrentBlock currentBlock = nameToBlockMap.computeIfAbsent(name, s -> new CurrentBlock(Block.newDirectBlock(), day));
 
@@ -38,6 +38,11 @@ public class TimeSeriesStore
                 throw new RuntimeException("WAT");
             }
         }
+    }
+
+    static long getDay(final long timestamp)
+    {
+        return timestamp / (24 * 60 * 60 * 1000);
     }
 
     private static class CurrentBlock

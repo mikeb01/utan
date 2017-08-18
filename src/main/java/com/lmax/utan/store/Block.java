@@ -665,6 +665,8 @@ public class Block
     {
         return "Block{" +
             "bitLength=" + lengthInBits() +
+            ", firstTimestamp=" + firstTimestamp() +
+            ", isFrozen=" + isFrozen() +
             ", tMinusOne=" + tMinusOne +
             ", tMinusTwo=" + tMinusTwo +
             ", lastValue=" + lastValue +

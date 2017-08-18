@@ -10,6 +10,8 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import static com.lmax.io.Dirs.ensureDirExists;
@@ -24,6 +26,7 @@ public class PersistentStoreWriter
     private static final long BLOCK_ALREADY_FROZEN = -1;
     private static final long BLOCK_OLDER_THAN_EXISTING = -2;
     private final static Set<? extends OpenOption> READ_WRITE_OPTIONS = EnumSet.of(CREATE, READ, WRITE);
+    private final Map<String, File> keyDirCache = new HashMap<>();
 
     private final File dir;
 
@@ -37,22 +40,42 @@ public class PersistentStoreWriter
         this.dir = dir;
     }
 
+    public File keyDir(String key)
+    {
+        byte[] keyAsBytes = key.getBytes(StandardCharsets.UTF_8);
+
+        try
+        {
+            File keyDir = PersistentStore.getKeyDir(this.dir, keyAsBytes, true);
+            ensureKeyFileExists(keyDir, keyAsBytes);
+
+            return keyDir;
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException("Failed to create directory for key: " + key, e);
+        }
+    }
+
     public void store(CharSequence key, Block block) throws IOException
     {
-        byte[] keyAsBytes = key.toString().getBytes(StandardCharsets.UTF_8);
-
-        File keyDir = PersistentStore.getKeyDir(this.dir, keyAsBytes, true);
-        ensureKeyFileExists(keyDir, keyAsBytes);
-
+        File keyDir = keyDirCache.computeIfAbsent(key.toString(), this::keyDir);
         File timeDir = PersistentStore.getTimeDir(keyDir, block.firstTimestamp(), true);
 
-        FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_WRITE_OPTIONS);
+        long writePosition = -1;
+        try (FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_WRITE_OPTIONS))
+        {
+            writePosition = getWritePosition(timeSeries, block.firstTimestamp());
+            ByteBuffer src = block.underlyingBuffer();
+            src.position(0).limit(Block.BYTE_LENGTH);
 
-        long writePosition = getWritePosition(timeSeries, block.firstTimestamp());
-        ByteBuffer src = block.underlyingBuffer();
-        src.position(0).limit(Block.BYTE_LENGTH);
-
-        timeSeries.write(src, writePosition);
+            timeSeries.write(src, writePosition);
+        }
+        catch (Exception e)
+        {
+            final String message = "Failed to write block - name: " + key + ", dir: " + timeDir + ", block: " + block + ", writePosition: " + writePosition;
+            throw new IOException(message, e);
+        }
     }
 
     private long getWritePosition(FileChannel timeSeries, long incomingFirstTimestamp) throws IOException
