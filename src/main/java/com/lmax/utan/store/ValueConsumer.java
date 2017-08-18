@@ -2,5 +2,5 @@ package com.lmax.utan.store;
 
 public interface ValueConsumer
 {
-    void accept(long timestamp, double value);
+    boolean accept(long timestamp, double value);
 }

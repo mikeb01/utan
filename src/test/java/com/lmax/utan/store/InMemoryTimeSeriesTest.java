@@ -87,6 +87,8 @@ public class InMemoryTimeSeriesTest
                 {
                     throw new RuntimeException(e);
                 }
+
+                return true;
             });
 
         Thread t = new Thread(r);
@@ -152,6 +154,8 @@ public class InMemoryTimeSeriesTest
                 assertThat(k).isLessThan(queryEnd);
                 assertThat(v).isEqualTo(timestampToValue.get(k));
                 count[0]++;
+
+                return true;
             });
 
         assertThat(count[0]).isGreaterThan(0);

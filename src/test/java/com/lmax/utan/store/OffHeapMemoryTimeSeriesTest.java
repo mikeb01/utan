@@ -84,6 +84,8 @@ public class OffHeapMemoryTimeSeriesTest
                 {
                     // No-op
                 }
+
+                return true;
             });
 
         Thread t = new Thread(r);
@@ -148,6 +150,8 @@ public class OffHeapMemoryTimeSeriesTest
                 assertThat(k).isLessThan(queryEnd);
                 assertThat(v).isEqualTo(timestampToValue.get(k));
                 count[0]++;
+
+                return true;
             });
 
         assertThat(count[0]).isGreaterThan(0);

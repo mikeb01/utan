@@ -94,8 +94,10 @@ public class InMemoryTimeSeries
                 {
                     if (startTimestamp <= k && k < endTimestamp)
                     {
-                        consumer.accept(k, v);
+                        return consumer.accept(k, v);
                     }
+
+                    return k < endTimestamp;
                 });
         }
     }
@@ -112,7 +114,7 @@ public class InMemoryTimeSeries
 
     private int indexOf(long andIncrement)
     {
-        return (int) (andIncrement & (blocks.length - 1));
+        return (int)(andIncrement & (blocks.length - 1));
     }
 
     public int capacity()

@@ -127,12 +127,14 @@ public class BlockConcurrencyTest
         private int counter = 0;
 
         @Override
-        public void accept(long timestamp, double value)
+        public boolean accept(long timestamp, double value)
         {
             assertThat(timestamp).isEqualTo(timestamps[counter]);
             assertThat(value).isEqualTo(values[counter]);
 
             counter++;
+
+            return true;
         }
 
         public void reset()

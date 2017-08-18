@@ -38,10 +38,12 @@ public class BlockReadBenchmark
         private Blackhole blackhole;
 
         @Override
-        public void accept(long timestamp, double value)
+        public boolean accept(long timestamp, double value)
         {
             blackhole.consume(timestamp);
             blackhole.consume(value);
+
+            return true;
         }
     }
 

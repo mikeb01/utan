@@ -133,8 +133,10 @@ public class OffHeapMemoryTimeSeries
                 {
                     if (startTimestamp <= k && k < endTimestamp)
                     {
-                        consumer.accept(k, v);
+                        return consumer.accept(k, v);
                     }
+
+                    return k < endTimestamp;
                 });
         }
     }

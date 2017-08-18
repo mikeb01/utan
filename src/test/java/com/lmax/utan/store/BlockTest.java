@@ -9,8 +9,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
+
 import static com.lmax.utan.store.Block.AppendStatus.FROZEN;
 import static java.lang.Integer.toBinaryString;
+
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
@@ -21,8 +24,11 @@ public class BlockTest
     @Test
     public void iterateOnEmptyBlock() throws Exception
     {
-        final int[] c = { 0 };
-        b.foreach((t, v) -> c[0]++);
+        final int[] c = {0};
+        b.foreach((t, v) -> {
+            c[0]++;
+            return true;
+        });
 
         assertThat(c[0]).isEqualTo(0);
         assertThat(b.isEmpty()).isTrue();
@@ -35,8 +41,8 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-        long[] timestamps = { timestamp };
-        double[] values = { val };
+        long[] timestamps = {timestamp};
+        double[] values = {val};
 
         assertWriteAndReadValues(timestamps, values);
         assertThat(b.lengthInBits()).isEqualTo(Block.COMPRESSED_DATA_START_BITS);
@@ -49,8 +55,8 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-        long[] timestamps = { timestamp, timestamp };
-        double[] values = { val, val };
+        long[] timestamps = {timestamp, timestamp};
+        double[] values = {val, val};
 
         assertWriteAndReadValues(timestamps, values);
     }
@@ -61,8 +67,8 @@ public class BlockTest
         long timestamp = System.currentTimeMillis();
         double val = 78432.3;
 
-        long[] timestamps = { timestamp, timestamp + 1000, timestamp + 2000 };
-        double[] values = { val, val + 1, val - 1 };
+        long[] timestamps = {timestamp, timestamp + 1000, timestamp + 2000};
+        double[] values = {val, val + 1, val - 1};
 
         assertWriteAndReadValues(timestamps, values);
     }
@@ -121,8 +127,8 @@ public class BlockTest
 
         double d = Double.longBitsToDouble(l);
 
-        long[] timestamps = { 0, Integer.MAX_VALUE };
-        double[] values = { 0, d };
+        long[] timestamps = {0, Integer.MAX_VALUE};
+        double[] values = {0, d};
 
         assertWriteAndReadValues(timestamps, values);
     }
@@ -140,7 +146,7 @@ public class BlockTest
             long timestamp = lastTimestamp + 1000 + (r.nextInt(100) - 50);
             double value = r.nextDouble() * 1000;
 
-            if(!b.append(timestamp, value).isOk())
+            if (!b.append(timestamp, value).isOk())
             {
                 break;
             }
@@ -196,6 +202,26 @@ public class BlockTest
         assertThat(b.isFrozen()).isTrue();
     }
 
+    @Test
+    public void shouldAllowEarlyExitFromConsumer() throws Exception
+    {
+        TimeSeriesSupplier supplier = new TimeSeriesSupplier(11111);
+
+        for (int i = 0; i < 100; i++)
+        {
+            Entry entry = supplier.get();
+            b.append(entry.timestamp, entry.value);
+        }
+
+        int[] count = {0};
+        assertThat(b.foreach((k, v) -> ++count[0] < 5)).isEqualTo(5);
+        assertThat(count[0]).isEqualTo(5);
+
+        count[0] = 0;
+        assertThat(b.foreach((k, v) -> ++count[0] < 1)).isEqualTo(1);
+        assertThat(count[0]).isEqualTo(1);
+    }
+
     private void assertWriteAndReadValues(long[] timestamps, double[] values)
     {
         final List<Entry> entries = new ArrayList<>(timestamps.length);
@@ -225,7 +251,7 @@ public class BlockTest
     private void assertTimestampsAndValues(Block b, List<Entry> entries)
     {
         final Iterator<Entry> iterator = entries.iterator();
-        final int index[] = { 0 };
+        final int index[] = {0};
 
         int count = b.foreach((t, v) -> {
             final Entry entry = iterator.next();
@@ -233,6 +259,7 @@ public class BlockTest
             assertThat(v).isEqualTo(entry.value);
 
             index[0]++;
+            return true;
         });
 
         assertThat(index[0]).isEqualTo(entries.size());

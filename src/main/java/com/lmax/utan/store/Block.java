@@ -158,7 +158,7 @@ public class Block
     public long lastTimestamp()
     {
         long[] lastTimestamp = {0};
-        foreach((timestamp, value) -> lastTimestamp[0] = timestamp);
+        foreach((timestamp, value) -> { lastTimestamp[0] = timestamp; return true; });
         return lastTimestamp[0];
     }
 
@@ -441,7 +441,10 @@ public class Block
         double value = buffer.getDouble(FIRST_VALUE_OFFSET, BIG_ENDIAN);
         long lastXorValue = 0;
 
-        consumer.accept(timestamp, value);
+        if (!consumer.accept(timestamp, value))
+        {
+            return 1;
+        }
 
         long tMinusOne = timestamp;
         long tMinusTwo = timestamp;
@@ -533,8 +536,11 @@ public class Block
                 }
             }
 
-            consumer.accept(timestamp, value);
             count++;
+            if (!consumer.accept(timestamp, value))
+            {
+                break;
+            }
         }
 
         return count;
