@@ -5,28 +5,31 @@ import org.agrona.concurrent.AtomicBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.concurrent.Semaphore;
-import java.util.zip.CRC32;
 
 import static java.lang.Long.highestOneBit;
 import static java.lang.Long.numberOfTrailingZeros;
 import static java.lang.String.format;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 
-public class Block
+public class Block implements Comparable<Block>
 {
     public static final int BYTE_LENGTH = 512;
+    public static final ByteOrder BYTE_ORDER = BIG_ENDIAN;
+
     private static final int HEADER_LENGTH_BITS = 64;
-    private static final int CRC_OFFSET = 4;
     static final int COMPRESSED_DATA_START_BITS = HEADER_LENGTH_BITS + 128;
-    private static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH_BITS / 8;
+    public static final int FIRST_TIMESTAMP_OFFSET = HEADER_LENGTH_BITS / 8;
     private static final int FIRST_VALUE_OFFSET = FIRST_TIMESTAMP_OFFSET + 8;
     private static final int BIT_LENGTH_LIMIT = BYTE_LENGTH * 8;
     private static final int INT_LENGTH = BYTE_LENGTH / 4;
     private static final int ALL_THE_LEASES = 1024;
-    private static final int FROZEN_BIT = 0b10000000_00000000_00000000_00000000;
-    private static final int BIT_LENGTH_MASK = 0x7FFFFFFF;
 
+    private final BlockHeader header;
     private final AtomicBuffer buffer;
     private final Semaphore resetSemaphore = new Semaphore(ALL_THE_LEASES);
 
@@ -56,8 +59,8 @@ public class Block
         {
             return this == OK;
         }
-    }
 
+    }
     public Block()
     {
         this(new UnsafeBuffer(new byte[BYTE_LENGTH]));
@@ -66,6 +69,7 @@ public class Block
     public Block(AtomicBuffer buffer)
     {
         this.buffer = buffer;
+        this.header = new BlockHeader(buffer);
         reset();
     }
 
@@ -94,24 +98,24 @@ public class Block
         return blocks;
     }
 
-    public boolean isFrozen()
-    {
-        return (~BIT_LENGTH_MASK & rawLengthInBits()) != 0;
-    }
-
-    private void setLengthInBits(int length)
-    {
-        buffer.putIntOrdered(0, length);
-    }
-
     public int lengthInBits()
     {
-        return BIT_LENGTH_MASK & rawLengthInBits();
+        return header.lengthInBits();
     }
 
-    public int rawLengthInBits()
+    public boolean isFrozen()
     {
-        return buffer.getIntVolatile(0);
+        return header.isFrozen();
+    }
+
+    public long firstTimestamp()
+    {
+        return header.firstTimestamp();
+    }
+
+    public long lastTimestamp()
+    {
+        return header.lastTimestamp();
     }
 
     // ====================
@@ -120,14 +124,12 @@ public class Block
 
     public synchronized AppendStatus append(long timestamp, double val)
     {
-        int bitOffset = rawLengthInBits();
-
-        if (isFrozen(bitOffset))
+        if (isFrozen())
         {
             return AppendStatus.FROZEN;
         }
 
-        bitOffset &= 0x7FFFFFFF;
+        int bitOffset = header.lengthInBits();
 
         if (bitOffset == HEADER_LENGTH_BITS)
         {
@@ -142,31 +144,14 @@ public class Block
 
     public boolean isEmpty()
     {
-        return lengthInBits() == HEADER_LENGTH_BITS;
-    }
-
-    public long firstTimestamp()
-    {
-        return buffer.getLong(FIRST_TIMESTAMP_OFFSET, BIG_ENDIAN);
-    }
-
-    /**
-     * Be careful with this method, it is O(n) and allocates.
-     *
-     * @return the last recorded timestamp in this block
-     */
-    public long lastTimestamp()
-    {
-        long[] lastTimestamp = {0};
-        foreach((timestamp, value) -> { lastTimestamp[0] = timestamp; return true; });
-        return lastTimestamp[0];
+        return header.lengthInBits() == HEADER_LENGTH_BITS;
     }
 
     private void appendInitial(long timestamp, double val)
     {
-        buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BIG_ENDIAN);
-        buffer.putDouble(FIRST_VALUE_OFFSET, val, BIG_ENDIAN);
-        setLengthInBits(COMPRESSED_DATA_START_BITS);
+        buffer.putLong(FIRST_TIMESTAMP_OFFSET, timestamp, BYTE_ORDER);
+        buffer.putDouble(FIRST_VALUE_OFFSET, val, BYTE_ORDER);
+        header.writeHeader(false, COMPRESSED_DATA_START_BITS, 0);
 
         tMinusOne = timestamp;
         tMinusTwo = timestamp;
@@ -237,7 +222,7 @@ public class Block
         lastValue = val;
         lastXorValue = xorValue;
 
-        setLengthInBits(newBitLength);
+        header.writeHeader(false, newBitLength, (int) (timestamp - firstTimestamp()));
 
         return AppendStatus.OK;
     }
@@ -377,7 +362,7 @@ public class Block
         int intAlignedBufferByteIndex = (bufferBitIndex / 32) * 4;
         int bufferBitSubIndex = bufferBitIndex & 31;
 
-        int existingValue = buffer.getInt(intAlignedBufferByteIndex, BIG_ENDIAN);
+        int existingValue = buffer.getInt(intAlignedBufferByteIndex, BYTE_ORDER);
 
         int tempShifted0 = existingValue | (temp0 >>> bufferBitSubIndex);
         int tempShifted1 = (temp0 & intMask(bufferBitSubIndex)) << (32 - bufferBitSubIndex) | (temp1 >>> bufferBitSubIndex);
@@ -391,15 +376,15 @@ public class Block
         switch (intsToWrite)
         {
             case 5:
-                buffer.putInt(intAlignedBufferByteIndex + 16, tempShifted4, BIG_ENDIAN);
+                buffer.putInt(intAlignedBufferByteIndex + 16, tempShifted4, BYTE_ORDER);
             case 4:
-                buffer.putInt(intAlignedBufferByteIndex + 12, tempShifted3, BIG_ENDIAN);
+                buffer.putInt(intAlignedBufferByteIndex + 12, tempShifted3, BYTE_ORDER);
             case 3:
-                buffer.putInt(intAlignedBufferByteIndex + 8, tempShifted2, BIG_ENDIAN);
+                buffer.putInt(intAlignedBufferByteIndex + 8, tempShifted2, BYTE_ORDER);
             case 2:
-                buffer.putInt(intAlignedBufferByteIndex + 4, tempShifted1, BIG_ENDIAN);
+                buffer.putInt(intAlignedBufferByteIndex + 4, tempShifted1, BYTE_ORDER);
             case 1:
-                buffer.putInt(intAlignedBufferByteIndex, tempShifted0, BIG_ENDIAN);
+                buffer.putInt(intAlignedBufferByteIndex, tempShifted0, BYTE_ORDER);
             default:
                 // Ignore
         }
@@ -430,15 +415,15 @@ public class Block
 
     private int doForEach(ValueConsumer consumer)
     {
-        int lengthInBits = lengthInBits();
+        int lengthInBits = header.lengthInBits();
 
         if (lengthInBits <= HEADER_LENGTH_BITS)
         {
             return 0;
         }
 
-        long timestamp = buffer.getLong(FIRST_TIMESTAMP_OFFSET, BIG_ENDIAN);
-        double value = buffer.getDouble(FIRST_VALUE_OFFSET, BIG_ENDIAN);
+        long timestamp = buffer.getLong(FIRST_TIMESTAMP_OFFSET, BYTE_ORDER);
+        double value = buffer.getDouble(FIRST_VALUE_OFFSET, BYTE_ORDER);
         long lastXorValue = 0;
 
         if (!consumer.accept(timestamp, value))
@@ -556,11 +541,11 @@ public class Block
         int longAlignedByteOffset = (bitOffset / 64) * 8;
         int bitSubIndex = bitOffset & 63;
 
-        long bitsUpper = buffer.getLong(longAlignedByteOffset, BIG_ENDIAN);
+        long bitsUpper = buffer.getLong(longAlignedByteOffset, BYTE_ORDER);
         long bitsLower;
         if (longAlignedByteOffset + 8 < buffer.capacity())
         {
-            bitsLower = buffer.getLong(longAlignedByteOffset + 8, BIG_ENDIAN);
+            bitsLower = buffer.getLong(longAlignedByteOffset + 8, BYTE_ORDER);
         }
         else
         {
@@ -588,8 +573,9 @@ public class Block
                 tMinusTwo = 0;
                 lastValue = 0.0;
                 lastXorValue = 0;
+                resetBitBuffer();
 
-                setLengthInBits(HEADER_LENGTH_BITS);
+                header.writeHeader(isFrozen(), HEADER_LENGTH_BITS, header.lastTimestampDelta());
             }
             finally
             {
@@ -598,11 +584,6 @@ public class Block
         }
 
         return resetAcquired;
-    }
-
-    public int compareTo(Block other)
-    {
-        return buffer.compareTo(other.buffer);
     }
 
     static long compressBits(long value, int numBits)
@@ -640,10 +621,10 @@ public class Block
         {
             try
             {
-                final int bitLength = lengthInBits();
+                final int bitLength = header.lengthInBits();
                 buffer.getBytes(0, block.buffer, 0, BYTE_LENGTH);
 
-                block.setLengthInBits(bitLength);
+                block.header.writeHeader(block.isFrozen(), bitLength, header.lastTimestampDelta());
                 block.zeroRemaining();
             }
             finally
@@ -655,10 +636,10 @@ public class Block
 
     private void zeroRemaining()
     {
-        final int intAlignedByteIndex = (lengthInBits() / 32) * 4;
-        final int bitOffset = lengthInBits() % 32;
-        final int remainingValue = buffer.getInt(intAlignedByteIndex, BIG_ENDIAN) & (intMask(bitOffset) << (32 - bitOffset));
-        buffer.putInt(intAlignedByteIndex, remainingValue, BIG_ENDIAN);
+        final int intAlignedByteIndex = (header.lengthInBits() / 32) * 4;
+        final int bitOffset = header.lengthInBits() % 32;
+        final int remainingValue = buffer.getInt(intAlignedByteIndex, BYTE_ORDER) & (intMask(bitOffset) << (32 - bitOffset));
+        buffer.putInt(intAlignedByteIndex, remainingValue, BYTE_ORDER);
 
         for (int i = intAlignedByteIndex + 4; i < INT_LENGTH; i += 4)
         {
@@ -670,40 +651,27 @@ public class Block
     public String toString()
     {
         return "Block{" +
-            "bitLength=" + lengthInBits() +
-            ", firstTimestamp=" + firstTimestamp() +
+            "bitLength=" + header.lengthInBits() +
+            ", firstTimestamp=" + getUtc(firstTimestamp()) + " (" + firstTimestamp() + ")" +
+            ", lastTimestampDelta=" + getUtc(lastTimestamp()) + " (" + lastTimestamp() + ")" +
             ", isFrozen=" + isFrozen() +
-            ", tMinusOne=" + tMinusOne +
-            ", tMinusTwo=" + tMinusTwo +
-            ", lastValue=" + lastValue +
-            ", lastXorValue=" + lastXorValue +
             '}';
+    }
+
+    static ZonedDateTime getUtc(long firstTimestamp)
+    {
+        return ZonedDateTime.ofInstant(Instant.ofEpochMilli(firstTimestamp), ZoneId.of("UTC"));
     }
 
     public synchronized void freeze()
     {
-        CRC32 crc32 = new CRC32();
-
-        for (int i = 0; i < 4; i++)
-        {
-            byte b = buffer.getByte(i);
-            crc32.update(0xFF & b);
-        }
-
-        for (int i = 8; i < BYTE_LENGTH; i++)
-        {
-            byte b = buffer.getByte(i);
-            crc32.update(0xFF & b);
-        }
-
-        int crc = (int) crc32.getValue();
-        buffer.putInt(CRC_OFFSET, crc, BIG_ENDIAN);
-        setLengthInBits(lengthInBits() | FROZEN_BIT);
+        header.writeHeader(true, header.lengthInBits(), header.lastTimestampDelta());
     }
 
-    private boolean isFrozen(int bitOffset)
+    @Override
+    public int compareTo(Block other)
     {
-        return (FROZEN_BIT & bitOffset) != 0;
+        return buffer.compareTo(other.buffer);
     }
 
     @Override

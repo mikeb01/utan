@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.lmax.utan.store.BlockGenerator.generateBlockData;
-import static junit.framework.TestCase.fail;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class PersistentStoreWriterTest
@@ -87,6 +86,7 @@ public class PersistentStoreWriterTest
 
         Block block = toLoad.findBlockContainingTimestamp(key, firstDayEntries.get(firstDayEntries.size() - 1).timestamp + 1);
 
+        assertThat(block).isNotNull();
         assertThat(block.firstTimestamp()).isEqualTo(futureDayEntries.get(0).timestamp);
         assertThat(block.lastTimestamp()).isEqualTo(futureDayEntries.get(futureDayEntries.size() - 1).timestamp);
     }
@@ -134,6 +134,7 @@ public class PersistentStoreWriterTest
 
         Block block = toLoad.findBlockContainingTimestamp(key, firstDayEntries.get(firstDayEntries.size() - 1).timestamp + 1);
 
+        assertThat(block).isNotNull();
         assertThat(block.firstTimestamp()).isEqualTo(futureDayEntries.get(0).timestamp);
         assertThat(block.lastTimestamp()).isEqualTo(futureDayEntries.get(futureDayEntries.size() - 1).timestamp);
     }

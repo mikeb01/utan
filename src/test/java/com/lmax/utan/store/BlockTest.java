@@ -1,6 +1,5 @@
 package com.lmax.utan.store;
 
-import org.agrona.concurrent.UnsafeBuffer;
 import org.assertj.core.api.Assertions;
 import org.junit.Test;
 
@@ -9,11 +8,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
-
 import static com.lmax.utan.store.Block.AppendStatus.FROZEN;
 import static java.lang.Integer.toBinaryString;
-
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class BlockTest
@@ -242,6 +238,7 @@ public class BlockTest
 
         b.copyTo(copy);
 
+        assertThat(copy).isEqualTo(b);
         assertThat(b.compareTo(copy)).isEqualTo(0);
 
         assertTimestampsAndValues(b, entries.subList(0, numWritten));
