@@ -415,7 +415,7 @@ public class Block implements Comparable<Block>
 
     private int doForEach(ValueConsumer consumer)
     {
-        int lengthInBits = header.lengthInBits();
+        final int lengthInBits = header.lengthInBits();
 
         if (lengthInBits <= HEADER_LENGTH_BITS)
         {
@@ -484,7 +484,7 @@ public class Block implements Comparable<Block>
             }
             else
             {
-                long prefixBits = readBits(bitOffset, 2);
+                final long prefixBits = readBits(bitOffset, 2);
                 bitOffset += 2;
 
                 if (0b10 == prefixBits)
