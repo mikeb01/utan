@@ -39,12 +39,32 @@ public class BlockHeader
 
     public int lengthInBits()
     {
-        return (int) (BIT_LENGTH_MASK & (readHeader() >>> 32L));
+        return lengthInBits(readHeader());
+    }
+
+    private static int lengthInBits(long headerValue)
+    {
+        return (int) (BIT_LENGTH_MASK & (headerValue >>> 32L));
     }
 
     public boolean isFrozen()
     {
-        return Long.highestOneBit(readHeader()) == FROZEN_BIT;
+        return isFrozen(readHeader());
+    }
+
+    private static boolean isFrozen(long headerValue)
+    {
+        return Long.highestOneBit(headerValue) == FROZEN_BIT;
+    }
+
+    public int lastTimestampDelta()
+    {
+        return lastTimestampDelta(readHeader());
+    }
+
+    private static int lastTimestampDelta(long headerValue)
+    {
+        return (int) (headerValue & 0xFFFFFFFFL);
     }
 
     public long firstTimestamp()
@@ -61,12 +81,12 @@ public class BlockHeader
     {
         long frozenBit = isFrozen ? FROZEN_BIT : 0;
         long header = frozenBit | widen(length) << 32L | widen(lastTimestampDelta);
-        buffer.putLongOrdered(0, header);
+        writeHeader(header);
     }
 
-    int lastTimestampDelta()
+    void writeHeader(long headerValue)
     {
-        return (int) (readHeader() & 0xFFFFFFFFL);
+        buffer.putLongOrdered(0, headerValue);
     }
 
     static long widen(int value)

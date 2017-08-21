@@ -621,10 +621,10 @@ public class Block implements Comparable<Block>
         {
             try
             {
-                final int bitLength = header.lengthInBits();
+                final long headerValue = header.readHeader();
                 buffer.getBytes(0, block.buffer, 0, BYTE_LENGTH);
 
-                block.header.writeHeader(block.isFrozen(), bitLength, header.lastTimestampDelta());
+                block.header.writeHeader(headerValue);
                 block.zeroRemaining();
             }
             finally
