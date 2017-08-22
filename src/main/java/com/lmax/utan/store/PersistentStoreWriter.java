@@ -66,10 +66,18 @@ public class PersistentStoreWriter
         try (FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_WRITE_OPTIONS))
         {
             writePosition = getWritePosition(timeSeries, block.firstTimestamp());
-            ByteBuffer src = block.underlyingBuffer();
-            src.position(0).limit(Block.BYTE_LENGTH);
 
-            timeSeries.write(src, writePosition);
+            if (writePosition == -1)
+            {
+                throw new IOException("Tried to overwrite already frozen block");
+            }
+            else if (writePosition == -2)
+            {
+                throw new IOException("Tried to write block with earlier timestamp");
+            }
+
+            block.underlyingBuffer().clear();
+            timeSeries.write(block.underlyingBuffer(), writePosition);
         }
         catch (Exception e)
         {
@@ -87,6 +95,7 @@ public class PersistentStoreWriter
 
         Block block = currentBlock.get();
         // Read last block.
+        block.underlyingBuffer().clear();
         timeSeries.read(block.underlyingBuffer(), timeSeries.size() - Block.BYTE_LENGTH);
 
         if (incomingFirstTimestamp == block.firstTimestamp() && block.isFrozen())
