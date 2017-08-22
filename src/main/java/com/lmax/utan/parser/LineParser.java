@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
-import static com.lmax.collection.Parse.parseLong;
+import static com.lmax.utan.collection.Parse.parseLong;
 
 public class LineParser
 {
@@ -72,7 +72,7 @@ public class LineParser
         builder.setLength(0);
     }
 
-    @SuppressWarnings("checkstyle:methodlength")
+    @SuppressWarnings({"checkstyle:methodlength", "StatementWithEmptyBody"})
     private void push(final int c) throws ParseException
     {
         switch (state)

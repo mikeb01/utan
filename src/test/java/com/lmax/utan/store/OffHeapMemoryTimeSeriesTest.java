@@ -1,6 +1,6 @@
 package com.lmax.utan.store;
 
-import com.lmax.collection.Maps;
+import com.lmax.utan.collection.Maps;
 import org.junit.Test;
 
 import java.io.File;

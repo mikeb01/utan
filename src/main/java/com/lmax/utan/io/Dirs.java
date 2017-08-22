@@ -1,4 +1,4 @@
-package com.lmax.io;
+package com.lmax.utan.io;
 
 import org.agrona.IoUtil;
 
@@ -29,9 +29,16 @@ public class Dirs
 
     public static void ensureDirExists(File dir) throws IOException
     {
-        if (!dir.mkdirs() && (!dir.exists() || !dir.isDirectory()))
+        if (!dir.exists())
         {
-            throw new IOException("Directory " + dir + " is not valid");
+            if (!dir.mkdirs())
+            {
+                throw new IOException("Directory " + dir + " is not valid");
+            }
+            else if (!dir.exists())
+            {
+                throw new IOException("Created: " + dir + ", but it still does not exist");
+            }
         }
     }
 
@@ -78,5 +85,54 @@ public class Dirs
             return a;
         }
         return b;
+    }
+
+    public static void delete(final File file) throws IOException
+    {
+        if (file == null)
+        {
+            return;
+        }
+
+        if (file.isDirectory())
+        {
+            deleteDir(file);
+        }
+        else
+        {
+            deleteFile(file);
+        }
+    }
+
+    public static void deleteDir(final File dir) throws IOException
+    {
+        final File[] childFiles = dir.listFiles(pathname -> !pathname.isDirectory());
+        if (childFiles == null)
+        {
+            return; // Directory doesn't exist, nothing more to do.
+        }
+        for (final File child : childFiles)
+        {
+            deleteFile(child);
+        }
+        final File[] childDirs = dir.listFiles(File::isDirectory);
+        if (childDirs == null)
+        {
+            return; // Directory got deleted by someone else, nothing more to do.
+        }
+        for (final File childDir : childDirs)
+        {
+            deleteDir(childDir);
+        }
+
+        deleteFile(dir);
+    }
+
+    private static void deleteFile(File child) throws IOException
+    {
+        if (child.exists() && !child.delete())
+        {
+            throw new IOException("Failed to delete: " + child);
+        }
     }
 }

@@ -1,4 +1,4 @@
-package com.lmax.io;
+package com.lmax.utan.io;
 
 import org.junit.Test;
 

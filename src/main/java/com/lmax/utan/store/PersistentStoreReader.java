@@ -1,7 +1,7 @@
 package com.lmax.utan.store;
 
-import com.lmax.collection.Strings;
-import com.lmax.io.Dirs;
+import com.lmax.utan.collection.Strings;
+import com.lmax.utan.io.Dirs;
 
 import java.io.File;
 import java.io.IOException;

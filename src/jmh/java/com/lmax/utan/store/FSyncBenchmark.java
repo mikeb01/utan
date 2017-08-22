@@ -1,6 +1,6 @@
 package com.lmax.utan.store;
 
-import com.lmax.io.Dirs;
+import com.lmax.utan.io.Dirs;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;

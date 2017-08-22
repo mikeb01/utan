@@ -1,6 +1,6 @@
 package com.lmax.utan.store;
 
-import com.lmax.collection.Strings;
+import com.lmax.utan.collection.Strings;
 
 import java.io.File;
 import java.io.IOException;
@@ -13,7 +13,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Set;
 
-import static com.lmax.io.Dirs.ensureDirExists;
+import static com.lmax.utan.io.Dirs.ensureDirExists;
 import static java.lang.ThreadLocal.withInitial;
 import static org.agrona.BitUtil.toHex;
 

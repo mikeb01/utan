@@ -1,4 +1,4 @@
-package com.lmax.collection;
+package com.lmax.utan.collection;
 
 import java.util.Map;
 import java.util.function.BiConsumer;

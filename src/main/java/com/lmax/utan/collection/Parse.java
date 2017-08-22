@@ -1,4 +1,4 @@
-package com.lmax.collection;
+package com.lmax.utan.collection;
 
 public class Parse
 {

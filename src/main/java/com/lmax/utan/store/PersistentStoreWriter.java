@@ -14,12 +14,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import static com.lmax.io.Dirs.ensureDirExists;
+import static com.lmax.utan.io.Dirs.ensureDirExists;
 import static java.lang.ThreadLocal.withInitial;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.nio.file.StandardOpenOption.WRITE;
-import static org.agrona.BitUtil.toHex;
 
 public class PersistentStoreWriter
 {
@@ -65,7 +64,7 @@ public class PersistentStoreWriter
         long writePosition = -1;
         try (FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_WRITE_OPTIONS))
         {
-            writePosition = getWritePosition(timeSeries, block.firstTimestamp());
+            writePosition = getWritePosition(timeSeries, block);
 
             if (writePosition == -1)
             {
@@ -86,29 +85,30 @@ public class PersistentStoreWriter
         }
     }
 
-    private long getWritePosition(FileChannel timeSeries, long incomingFirstTimestamp) throws IOException
+    private long getWritePosition(FileChannel timeSeries, Block incomingBlock) throws IOException
     {
         if (timeSeries.size() == 0)
         {
             return 0;
         }
 
-        Block block = currentBlock.get();
+        // TODO: Use block header
+        Block storedBlock = currentBlock.get();
         // Read last block.
-        block.underlyingBuffer().clear();
-        timeSeries.read(block.underlyingBuffer(), timeSeries.size() - Block.BYTE_LENGTH);
+        storedBlock.underlyingBuffer().clear();
+        timeSeries.read(storedBlock.underlyingBuffer(), timeSeries.size() - Block.BYTE_LENGTH);
 
-        if (incomingFirstTimestamp == block.firstTimestamp() && block.isFrozen())
+        if (incomingBlock.firstTimestamp() == storedBlock.firstTimestamp() && storedBlock.isFrozen())
         {
-            return BLOCK_ALREADY_FROZEN;
+            throw new IOException("incoming: " + incomingBlock + ", stored: " + storedBlock);
         }
 
-        if (incomingFirstTimestamp < block.firstTimestamp())
+        if (incomingBlock.firstTimestamp() < storedBlock.firstTimestamp())
         {
             return BLOCK_OLDER_THAN_EXISTING;
         }
 
-        return block.isFrozen() ? timeSeries.size() : timeSeries.size() - Block.BYTE_LENGTH;
+        return storedBlock.isFrozen() ? timeSeries.size() : timeSeries.size() - Block.BYTE_LENGTH;
     }
 
     private void ensureKeyFileExists(File keyPath, byte[] key) throws IOException
