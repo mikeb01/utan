@@ -1,11 +1,8 @@
 package com.lmax.utan.store;
 
-import org.agrona.concurrent.UnsafeBuffer;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
@@ -29,8 +26,7 @@ public class PersistentStoreWriter
 
     private final File dir;
 
-    private final ThreadLocal<Block> currentBlock = withInitial(
-        () -> new Block(new UnsafeBuffer(ByteBuffer.allocateDirect(Block.BYTE_LENGTH))));
+    private final ThreadLocal<BlockHeader> currentBlock = withInitial(BlockHeader::allocateDirect);
 
     public PersistentStoreWriter(File dir) throws IOException
     {
@@ -58,29 +54,18 @@ public class PersistentStoreWriter
 
     public void store(CharSequence key, Block block) throws IOException
     {
-        File keyDir = keyDirCache.computeIfAbsent(key.toString(), this::keyDir);
-        File timeDir = PersistentStore.getTimeDir(keyDir, block.firstTimestamp(), true);
+        final File keyDir = keyDirCache.computeIfAbsent(key.toString(), this::keyDir);
+        final File timeDir = PersistentStore.getTimeDir(keyDir, block.firstTimestamp(), true);
 
-        long writePosition = -1;
         try (FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_WRITE_OPTIONS))
         {
-            writePosition = getWritePosition(timeSeries, block);
-
-            if (writePosition == -1)
-            {
-                throw new IOException("Tried to overwrite already frozen block");
-            }
-            else if (writePosition == -2)
-            {
-                throw new IOException("Tried to write block with earlier timestamp");
-            }
-
+            final long writePosition = getWritePosition(timeSeries, block);
             block.underlyingBuffer().clear();
             timeSeries.write(block.underlyingBuffer(), writePosition);
         }
         catch (Exception e)
         {
-            final String message = "Failed to write block - name: " + key + ", dir: " + timeDir + ", block: " + block + ", writePosition: " + writePosition;
+            final String message = "Failed to write block - name: " + key + ", dir: " + timeDir;
             throw new IOException(message, e);
         }
     }
@@ -92,23 +77,23 @@ public class PersistentStoreWriter
             return 0;
         }
 
-        // TODO: Use block header
-        Block storedBlock = currentBlock.get();
         // Read last block.
+        BlockHeader storedBlock = currentBlock.get();
         storedBlock.underlyingBuffer().clear();
-        timeSeries.read(storedBlock.underlyingBuffer(), timeSeries.size() - Block.BYTE_LENGTH);
+        final long position = timeSeries.size() - Block.BYTE_LENGTH;
+        timeSeries.read(storedBlock.underlyingBuffer(), position);
 
         if (incomingBlock.firstTimestamp() == storedBlock.firstTimestamp() && storedBlock.isFrozen())
         {
-            throw new IOException("incoming: " + incomingBlock + ", stored: " + storedBlock);
+            throw new IOException("Stored block(" + position + ") is already frozen, incoming: " + incomingBlock + ", stored: " + storedBlock);
         }
 
         if (incomingBlock.firstTimestamp() < storedBlock.firstTimestamp())
         {
-            return BLOCK_OLDER_THAN_EXISTING;
+            throw new IOException("Stored block(" + position + ") is newer than incoming block, incoming: " + incomingBlock + ", stored: " + storedBlock);
         }
 
-        return storedBlock.isFrozen() ? timeSeries.size() : timeSeries.size() - Block.BYTE_LENGTH;
+        return storedBlock.isFrozen() ? timeSeries.size() : position;
     }
 
     private void ensureKeyFileExists(File keyPath, byte[] key) throws IOException

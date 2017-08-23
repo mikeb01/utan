@@ -2,7 +2,9 @@ package com.lmax.utan.store;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -33,7 +35,7 @@ public class ConcurrentStore
 
     public void stopAndWait() throws InterruptedException
     {
-        thread.interrupt();
+        backgroundWriter.running = false;
         thread.join();
     }
 
@@ -118,10 +120,11 @@ public class ConcurrentStore
 
     private static class BackgroundWriter implements Runnable
     {
-        private final Map<String, WriterInfo> blocks = new HashMap<>();
+        private final List<WriterInfo> blocks = new ArrayList<>();
         private final File dir;
         private final Queue<BlockQueue> controlQ;
         private final PersistentStoreWriter writer;
+        private volatile boolean running = true;
 
         public BackgroundWriter(File dir, Queue<BlockQueue> controlQ) throws IOException
         {
@@ -133,49 +136,56 @@ public class ConcurrentStore
         @Override
         public void run()
         {
-            while (!Thread.currentThread().isInterrupted())
+            while (running && !Thread.currentThread().isInterrupted())
             {
                 pollControlQ();
-                pollBlockQueues();
-                LockSupport.parkNanos(1);
+                if (0 != pollBlockQueues())
+                {
+                    LockSupport.parkNanos(1);
+                }
             }
         }
 
-        private void pollBlockQueues()
+        private int pollBlockQueues()
         {
             final Block localBlockCopy = Block.newDirectBlock();
 
-            blocks.forEach(
-                (ignore, writerInfo) ->
+            int blocksWritten = 0;
+            for (int i = 0, n = blocks.size(); i < n; i++)
+            {
+                WriterInfo writerInfo = blocks.get(i);
+                try
                 {
-                    try
+                    boolean pollNext = false;
+                    do
                     {
-                        boolean pollNext = false;
-                        do
+                        Block blockToWrite = writerInfo.getChangedBlockForWriting();
+
+                        if (blockToWrite != null)
                         {
-                            Block blockToWrite = writerInfo.getChangedBlockForWriting();
+                            blockToWrite.copyTo(localBlockCopy);
 
-                            if (blockToWrite != null)
+                            writer.store(writerInfo.blockQueue.key, localBlockCopy);
+                            writerInfo.updateLastWrite(localBlockCopy.lastTimestamp());
+                            blocksWritten++;
+
+                            pollNext = localBlockCopy.isFrozen();
+                            if (pollNext)
                             {
-                                blockToWrite.copyTo(localBlockCopy);
-
-                                writer.store(writerInfo.blockQueue.key, localBlockCopy);
-                                writerInfo.updateLastWrite(localBlockCopy.lastTimestamp());
-
-                                pollNext = localBlockCopy.isFrozen();
-                                if (pollNext)
-                                {
-                                    writerInfo.blockQueue.pop();
-                                }
+                                writerInfo.blockQueue.pop();
                             }
                         }
-                        while (pollNext);
                     }
-                    catch (IOException e)
-                    {
-                        throw new RuntimeException(e);
-                    }
-                });
+                    while (pollNext);
+                }
+                catch (IOException e)
+                {
+                    // Logging perhaps
+                    e.printStackTrace();
+                }
+            }
+
+            return blocksWritten;
         }
 
         private void pollControlQ()
@@ -183,17 +193,7 @@ public class ConcurrentStore
             BlockQueue bq;
             while ((bq = controlQ.poll()) != null)
             {
-                if (bq.live)
-                {
-                    if (!blocks.containsKey(bq.key))
-                    {
-                        blocks.put(bq.key, new WriterInfo(bq));
-                    }
-                }
-                else
-                {
-                    blocks.remove(bq.key);
-                }
+                blocks.add(new WriterInfo(bq));
             }
         }
     }

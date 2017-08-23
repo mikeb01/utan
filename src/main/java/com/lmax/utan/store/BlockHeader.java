@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 
 import static com.lmax.utan.store.Block.BYTE_ORDER;
 import static com.lmax.utan.store.Block.FIRST_TIMESTAMP_OFFSET;
+import static com.lmax.utan.store.Block.getUtc;
 
 public class BlockHeader
 {
@@ -92,5 +93,16 @@ public class BlockHeader
     static long widen(int value)
     {
         return ((long) value) & 0xFFFFFFFFL;
+    }
+
+    @Override
+    public String toString()
+    {
+        return "Block{" +
+            "bitLength=" + lengthInBits() +
+            ", firstTimestamp=" + getUtc(firstTimestamp()) + " (" + firstTimestamp() + ")" +
+            ", lastTimestampDelta=" + getUtc(lastTimestamp()) + " (" + lastTimestamp() + ")" +
+            ", isFrozen=" + isFrozen() +
+            '}';
     }
 }
