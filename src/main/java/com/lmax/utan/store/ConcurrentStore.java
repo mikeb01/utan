@@ -70,7 +70,6 @@ public class ConcurrentStore
         private final String key;
         private final Queue<Block> blocks = new ConcurrentLinkedQueue<>();
         private Block current;
-        private boolean live = true;
 
         private BlockQueue(String key)
         {
