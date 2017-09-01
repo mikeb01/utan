@@ -75,7 +75,7 @@ public class PersistentStoreReader
 
         if (null != nextYear)
         {
-            nextMonth = Dirs.firstInDir(yearDir, VALID_MONTHS::contains);
+            nextMonth = Dirs.firstInDir(nextYear, VALID_MONTHS::contains);
             if (null != nextMonth)
             {
                 nextDay = Dirs.firstInDir(nextMonth, VALID_DAYS::contains);
@@ -123,13 +123,13 @@ public class PersistentStoreReader
 
         if (null == timeDir || !timeDir.exists())
         {
-            throw new IOException("No data available");
+            throw new IOException("No data available for key: " + blockCursor.key + ", timeDir: " + timeDir);
         }
 
         final FileChannel timeSeries = PersistentStore.getTimeSeriesChannel(timeDir, READ_ONLY_OPTIONS);
         if (timeSeries.size() < Block.BYTE_LENGTH)
         {
-            throw new IOException("No data in time series: " + timeSeries);
+            throw new IOException("No data in time series for key: " + blockCursor.key + ", timeDir: " + timeDir);
         }
 
         long currentPosition = 0;

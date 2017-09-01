@@ -266,6 +266,8 @@ public class Block implements Comparable<Block>
         {
             int relevantLength = 64 - (leadingZeros + trailingZeros);
 
+            leadingZeros = leadingZeros > 31 ? 31 : leadingZeros;
+
             length += writeBits(bitOffset, 0b11L, 2);
             length += writeBits(bitOffset + 2, (long) leadingZeros, 5);
             length += writeBits(bitOffset + 2 + 5, (long) (relevantLength - 1), 6);

@@ -130,6 +130,15 @@ public class BlockTest
     }
 
     @Test
+    public void shouldHandleValuesThatCreateLeadingZerosOf32() throws Exception
+    {
+        long[] timestamps = { 1501922076174L, 1501922106174L, 1501922136174L, 1501922166174L, 1501922196174L, };
+        double[] values = { 4968952.000000, 4968952.000000, 4968952.000000, 4968952.000000, 4968953.000000 }; /* 4968958.000000 */
+
+        assertWriteAndReadValues(timestamps, values);
+    }
+
+    @Test
     public void shouldWriteUntilBufferIsFull() throws Exception
     {
         Random r = new Random(7);
