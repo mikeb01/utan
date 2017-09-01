@@ -42,4 +42,51 @@ public class Strings
                 return String.valueOf(value);
         }
     }
+
+    public static StringBuilder lPad(String s, char padChar, int length)
+    {
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length - s.length(); i++)
+        {
+            sb.append(padChar);
+        }
+        sb.append(s);
+        return sb;
+    }
+
+    @SuppressWarnings("StringConcatenationInLoop")
+    public static String bitString(long l)
+    {
+        final StringBuilder stringBuilder = lPad(Long.toBinaryString(l), '0', 64);
+        String s = "0b";
+        for (int i = 0; i < 8; i++)
+        {
+            for (int j = 0; j < 8; j++)
+            {
+                char c = stringBuilder.charAt(i * 8 + j);
+                s += c;
+            }
+            s += '_';
+        }
+
+        return s.substring(0, s.length() - 1);
+    }
+
+    @SuppressWarnings("StringConcatenationInLoop")
+    public static String bitString(int l)
+    {
+        final StringBuilder stringBuilder = lPad(Integer.toBinaryString(l), '0', 32);
+        String s = "0b";
+        for (int i = 0; i < 4; i++)
+        {
+            for (int j = 0; j < 8; j++)
+            {
+                char c = stringBuilder.charAt(i * 8 + j);
+                s += c;
+            }
+            s += '_';
+        }
+
+        return s.substring(0, s.length() - 1);
+    }
 }
