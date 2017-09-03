@@ -13,6 +13,7 @@ import java.util.concurrent.Semaphore;
 
 import static java.lang.Long.highestOneBit;
 import static java.lang.Long.numberOfTrailingZeros;
+import static java.lang.Math.min;
 import static java.lang.String.format;
 import static java.nio.ByteOrder.BIG_ENDIAN;
 
@@ -249,7 +250,7 @@ public class Block implements Comparable<Block>
 
     private int appendValueXor(int bitOffset, long xorValue, long previousXorValue)
     {
-        int leadingZeros = Long.numberOfLeadingZeros(xorValue);
+        int leadingZeros = min(31, Long.numberOfLeadingZeros(xorValue));
         int trailingZeros = Long.numberOfTrailingZeros(xorValue);
         int prevLeadingZeros = Long.numberOfLeadingZeros(previousXorValue);
         int prevTrailingZeros = Long.numberOfTrailingZeros(previousXorValue);
@@ -266,12 +267,10 @@ public class Block implements Comparable<Block>
         {
             int relevantLength = 64 - (leadingZeros + trailingZeros);
 
-//            leadingZeros = leadingZeros > 31 ? 31 : leadingZeros;
-
             length += writeBits(bitOffset, 0b11L, 2);
-            length += writeBits(bitOffset + 2, (long) leadingZeros, 6);
-            length += writeBits(bitOffset + 2 + 6, (long) (relevantLength - 1), 6);
-            length += writeBits(bitOffset + 2 + 6 + 6, xorValue >>> trailingZeros, relevantLength);
+            length += writeBits(bitOffset + 2, (long) leadingZeros, 5);
+            length += writeBits(bitOffset + 2 + 5, (long) (relevantLength - 1), 6);
+            length += writeBits(bitOffset + 2 + 5 + 6, xorValue >>> trailingZeros, relevantLength);
         }
 
         return length;
@@ -504,16 +503,16 @@ public class Block implements Comparable<Block>
                 }
                 else if (0b11 == prefixBits)
                 {
-                    int leadingZeros = readBits(bitOffset, 6);
-                    int length = readBits(bitOffset + 6, 6) + 1;
+                    int leadingZeros = readBits(bitOffset, 5);
+                    int length = readBits(bitOffset + 5, 6) + 1;
                     long shift = 64 - (leadingZeros + length);
-                    long xorValue = readBitsLong(bitOffset + 6 + 6, length) << shift;
+                    long xorValue = readBitsLong(bitOffset + 5 + 6, length) << shift;
 
                     value = Double.longBitsToDouble(xorValue ^ Double.doubleToLongBits(value));
 
                     lastXorValue = xorValue;
 
-                    bitOffset += 6;
+                    bitOffset += 5;
                     bitOffset += 6;
                     bitOffset += length;
                 }
