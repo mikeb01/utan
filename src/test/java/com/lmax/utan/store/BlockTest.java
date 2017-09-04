@@ -139,6 +139,15 @@ public class BlockTest
     }
 
     @Test
+    public void shouldHandleLargeNegativeTimestampDelta() throws Exception
+    {
+        long[] timestamps = { 1502274380293L, 1502274381293L, 1502274382293L, 1502274472291L, 1502274473291L };
+        double[] values = { 514334.000000, 948790.000000, 504859.000000, 41088863.000000, 993385.000000 };
+
+        assertWriteAndReadValues(timestamps, values);
+    }
+
+    @Test
     public void shouldWriteUntilBufferIsFull() throws Exception
     {
         Random r = new Random(7);

@@ -40,6 +40,16 @@ public class TimeSeriesStore
         }
     }
 
+    public void flush(String name) throws IOException
+    {
+        final CurrentBlock currentBlock = nameToBlockMap.get(name);
+        if (null != currentBlock)
+        {
+            currentBlock.block.freeze();
+            writer.store(name, currentBlock.block);
+        }
+    }
+
     static long getDay(final long timestamp)
     {
         return timestamp / (24 * 60 * 60 * 1000);
