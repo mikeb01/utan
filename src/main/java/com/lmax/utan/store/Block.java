@@ -30,6 +30,21 @@ public class Block implements Comparable<Block>
     private static final int INT_LENGTH = BYTE_LENGTH / 4;
     private static final int ALL_THE_LEASES = 1024;
 
+    private static final int TS_SHORT_MIN = -64;
+    private static final int TS_SHORT_MAX = 63;
+    private static final int TS_SHORT_PREFIX = 0b10;
+    private static final int TS_MED_MIN = -256;
+    private static final int TS_MED_MAX = 255;
+    private static final int TS_MED_PREFIX = 0b110;
+    private static final int TS_LONG_MIN = -2048;
+    private static final int TS_LONG_MAX = 2047;
+    private static final int TS_LONG_PREFIX = 0b1110;
+    private static final int TS_FULL_PREFIX = 0b11110;
+    public static final int TS_SHORT_NBITS = 7;
+    public static final int TS_MED_NBITS = 9;
+    public static final int TS_LONG_NBITS = 12;
+    public static final int TS_FILL_NBITS = 32;
+
     private final BlockHeader header;
     private final AtomicBuffer buffer;
     private final Semaphore resetSemaphore = new Semaphore(ALL_THE_LEASES);
@@ -170,21 +185,21 @@ public class Block implements Comparable<Block>
         {
             timestampBitsAdded = appendZeroTimestampDelta();
         }
-        else if (-64 <= d && d <= 63)
+        else if (TS_SHORT_MIN <= d && d <= TS_SHORT_MAX)
         {
-            timestampBitsAdded = appendTimestampDelta(0, 7, 0b10, d);
+            timestampBitsAdded = appendTimestampDelta(0, TS_SHORT_NBITS, TS_SHORT_PREFIX, (int) d - TS_SHORT_MIN);
         }
-        else if (-256 <= d && d <= 255)
+        else if (TS_MED_MIN <= d && d <= TS_MED_MAX)
         {
-            timestampBitsAdded = appendTimestampDelta(0, 9, 0b110, d);
+            timestampBitsAdded = appendTimestampDelta(0, TS_MED_NBITS, TS_MED_PREFIX, (int) d - TS_MED_MIN);
         }
-        else if (-2048 <= d && d <= 2047)
+        else if (TS_LONG_MIN <= d && d <= TS_LONG_MAX)
         {
-            timestampBitsAdded = appendTimestampDelta(0, 12, 0b1110, d);
+            timestampBitsAdded = appendTimestampDelta(0, TS_LONG_NBITS, TS_LONG_PREFIX, (int) d - TS_LONG_MIN);
         }
         else if (Integer.MIN_VALUE <= d && d <= Integer.MAX_VALUE)
         {
-            timestampBitsAdded = appendTimestampDelta(0, 32, 0b11110, d);
+            timestampBitsAdded = appendTimestampDelta(0, TS_FILL_NBITS, TS_FULL_PREFIX, (int) d);
         }
         else
         {
@@ -233,12 +248,12 @@ public class Block implements Comparable<Block>
         return 1;
     }
 
-    private int appendTimestampDelta(int bitOffset, int numBits, int markerBits, long timestampDelta)
+    private int appendTimestampDelta(int bitOffset, int numBits, int markerBits, int timestampDelta)
     {
         int markerBitLength = numberOfTrailingZeros(highestOneBit(markerBits) << 1);
 
-        writeBits(bitOffset, (long) markerBits, markerBitLength);
-        writeBits(bitOffset + markerBitLength, compressBits(timestampDelta, numBits), numBits);
+        writeBits(bitOffset, markerBits, markerBitLength);
+        writeBits(bitOffset + markerBitLength, timestampDelta, numBits);
 
         return markerBitLength + numBits;
     }
@@ -259,7 +274,7 @@ public class Block implements Comparable<Block>
 
         if (leadingZeros >= prevLeadingZeros && trailingZeros >= prevTrailingZeros)
         {
-            length += writeBits(bitOffset, (long) 0b10, 2);
+            length += writeBits(bitOffset, 0b10, 2);
             length += writeBits(
                 bitOffset + 2, xorValue >>> prevTrailingZeros, 64 - (prevLeadingZeros + prevTrailingZeros));
         }
@@ -267,13 +282,19 @@ public class Block implements Comparable<Block>
         {
             int relevantLength = 64 - (leadingZeros + trailingZeros);
 
-            length += writeBits(bitOffset, 0b11L, 2);
-            length += writeBits(bitOffset + 2, (long) leadingZeros, 5);
-            length += writeBits(bitOffset + 2 + 5, (long) (relevantLength - 1), 6);
+            length += writeBits(bitOffset, 0b11, 2);
+            length += writeBits(bitOffset + 2, leadingZeros, 5);
+            length += writeBits(bitOffset + 2 + 5, (relevantLength - 1), 6);
             length += writeBits(bitOffset + 2 + 5 + 6, xorValue >>> trailingZeros, relevantLength);
         }
 
         return length;
+    }
+
+    @SuppressWarnings("UnusedReturnValue") // It is actually...
+    int writeBits(int tempBitIndex, int value, int valueBitLength)
+    {
+        return writeBits(tempBitIndex, value & 0xFFFFFFFFL, valueBitLength);
     }
 
     int writeBits(int tempBitIndex, long value, int valueBitLength)
@@ -440,34 +461,34 @@ public class Block implements Comparable<Block>
         int count = 1;
         while (bitOffset < lengthInBits)
         {
-            final long delta;
+            final int delta;
             if (0 == readBits(bitOffset, 1))
             {
                 bitOffset += 1;
                 delta = 0;
             }
-            else if (0b10 == readBits(bitOffset, 2))
+            else if (TS_SHORT_PREFIX == readBits(bitOffset, 2))
             {
                 bitOffset += 2;
-                delta = decompressBits(readBits(bitOffset, 7), 7);
-                bitOffset += 7;
+                delta = readBits(bitOffset, TS_SHORT_NBITS) + TS_SHORT_MIN;
+                bitOffset += TS_SHORT_NBITS;
             }
-            else if (0b110 == readBits(bitOffset, 3))
+            else if (TS_MED_PREFIX == readBits(bitOffset, 3))
             {
                 bitOffset += 3;
-                delta = decompressBits(readBits(bitOffset, 9), 9);
-                bitOffset += 9;
+                delta = readBits(bitOffset, TS_MED_NBITS) + TS_MED_MIN;
+                bitOffset += TS_MED_NBITS;
             }
-            else if (0b1110 == readBits(bitOffset, 4))
+            else if (TS_LONG_PREFIX == readBits(bitOffset, 4))
             {
                 bitOffset += 4;
-                delta = decompressBits(readBits(bitOffset, 12), 12);
-                bitOffset += 12;
+                delta = readBits(bitOffset, TS_LONG_NBITS) + TS_LONG_MIN;
+                bitOffset += TS_LONG_NBITS;
             }
-            else if (0b11110 == readBits(bitOffset, 5))
+            else if (TS_FULL_PREFIX == readBits(bitOffset, 5))
             {
                 bitOffset += 5;
-                delta = decompressBits(readBits(bitOffset, 32), 32);
+                delta = readBits(bitOffset, 32);
                 bitOffset += 32;
             }
             else
@@ -587,11 +608,6 @@ public class Block implements Comparable<Block>
         return resetAcquired;
     }
 
-    static long compressBits(long value, int numBits)
-    {
-        return value & ((1 << (numBits - 1)) - 1) | ((value >>> 63) << (numBits - 1));
-    }
-
     private static long longMask(int numBits)
     {
         assert numBits <= 64;
@@ -607,13 +623,6 @@ public class Block implements Comparable<Block>
     static boolean valueInRange(int bitLength, long value)
     {
         return (value & ~longMask(bitLength)) == 0;
-    }
-
-    static long decompressBits(long value, int numBits)
-    {
-        long sign = value >>> numBits - 1;
-        long mask = (1 << (numBits - 1)) - 1;
-        return value & mask | -sign & ~mask;
     }
 
     public void copyTo(Block block)

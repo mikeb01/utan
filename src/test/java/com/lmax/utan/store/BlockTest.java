@@ -1,6 +1,5 @@
 package com.lmax.utan.store;
 
-import org.assertj.core.api.Assertions;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -67,22 +66,6 @@ public class BlockTest
         double[] values = {val, val + 1, val - 1};
 
         assertWriteAndReadValues(timestamps, values);
-    }
-
-    @Test
-    public void compressTo7Bits()
-    {
-        for (int i = -64, j = 64; i < 0; i++, j++)
-        {
-            Assertions.assertThat(Block.compressBits(i, 7)).isEqualTo(j);
-            Assertions.assertThat(Block.decompressBits(Block.compressBits(i, 7), 7)).isEqualTo(i);
-        }
-
-        for (int i = 0, j = 0; i < 64; i++, j++)
-        {
-            Assertions.assertThat(Block.compressBits(i, 7)).isEqualTo(j);
-            Assertions.assertThat(Block.decompressBits(Block.compressBits(i, 7), 7)).isEqualTo(i);
-        }
     }
 
     @Test
