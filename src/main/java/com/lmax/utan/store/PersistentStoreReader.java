@@ -9,6 +9,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
+import java.security.spec.PSSParameterSpec;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
@@ -89,18 +90,17 @@ public class PersistentStoreReader
         return null;
     }
 
-    private Block readBlock(FileChannel fileChannel, Block block, long position) throws IOException
+    private void readHeader(final BlockHeader blockHeader, final FileChannel timeSeries, final long currentPosition) throws IOException
     {
-        block.underlyingBuffer().clear();
-        fileChannel.read(block.underlyingBuffer(), position);
-        return block;
+        blockHeader.underlyingBuffer().clear();
+        timeSeries.read(blockHeader.underlyingBuffer(), currentPosition);
     }
 
-    private void readBlock(File timeDir, FileChannel fileChannel, BlockCursor block, long position) throws IOException
+    private void readBlock(File timeDir, FileChannel fileChannel, BlockCursor blockCursor, long position) throws IOException
     {
-        block.currentBlock.underlyingBuffer().clear();
-        fileChannel.read(block.currentBlock.underlyingBuffer(), position);
-        block.setLocation(timeDir, fileChannel, position);
+        blockCursor.currentBlock.underlyingBuffer().clear();
+        fileChannel.read(blockCursor.currentBlock.underlyingBuffer(), position);
+        blockCursor.setLocation(timeDir, fileChannel, position);
     }
 
     boolean findCurrentBlock(BlockCursor blockCursor) throws IOException
@@ -137,8 +137,7 @@ public class PersistentStoreReader
         // Find the first block in this data file.
         do
         {
-            blockHeader.underlyingBuffer().clear();
-            timeSeries.read(blockHeader.underlyingBuffer(), currentPosition);
+            readHeader(blockHeader, timeSeries, currentPosition);
             final long blockLastTimestamp = blockHeader.lastTimestamp();
             if (blockCursor.startTimestamp <= blockLastTimestamp)
             {
@@ -197,6 +196,27 @@ public class PersistentStoreReader
     public Cursor<Block> query(CharSequence key, long startTimestamp, long endTimestamp)
     {
         return new BlockCursor(key, startTimestamp, endTimestamp);
+    }
+
+    public boolean exists(final CharSequence key) throws IOException
+    {
+        return PersistentStore.getKeyDir(dir, key, false).exists();
+    }
+
+    public long lastTimestamp(final String key) throws IOException
+    {
+        final File keyDir = PersistentStore.getKeyDir(dir, key, false);
+
+        final File lastYear = Dirs.lastInDir(keyDir, VALID_YEARS::contains);
+        final File lastMonth = Dirs.lastInDir(lastYear, VALID_MONTHS::contains);
+        final File lastDay = Dirs.lastInDir(lastMonth, VALID_DAYS::contains);
+
+        final FileChannel timeSeriesChannel = PersistentStore.getTimeSeriesChannel(lastDay, READ_ONLY_OPTIONS);
+
+        BlockHeader header = BlockHeader.allocateDirect();
+        readHeader(header, timeSeriesChannel, timeSeriesChannel.size() - Block.BYTE_LENGTH);
+
+        return header.lastTimestamp();
     }
 
     private class BlockCursor implements Cursor<Block>

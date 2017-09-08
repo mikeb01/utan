@@ -7,6 +7,9 @@ import java.io.IOException;
 import java.util.UUID;
 import java.util.function.Predicate;
 
+
+import static java.lang.Math.max;
+
 public class Dirs
 {
     public static File createTempDir(String prefix)
@@ -66,6 +69,17 @@ public class Dirs
         return min(laterSiblings);
     }
 
+    public static File lastInDir(File parent, Predicate<String> namePredicate)
+    {
+        File[] laterSiblings = parent.listFiles(pathname -> namePredicate.test(pathname.getName()));
+        if (null == laterSiblings)
+        {
+            return null;
+        }
+
+        return max(laterSiblings);
+    }
+
     private static <T extends Comparable<T>> T min(T[] values)
     {
         T result = null;
@@ -81,6 +95,27 @@ public class Dirs
     private static <T extends Comparable<T>> T min(T a, T b)
     {
         if (a.compareTo(b) <= 0)
+        {
+            return a;
+        }
+        return b;
+    }
+
+    private static <T extends Comparable<T>> T max(T[] values)
+    {
+        T result = null;
+
+        for (T value : values)
+        {
+            result = null == result ? value : max(result, value);
+        }
+
+        return result;
+    }
+
+    private static <T extends Comparable<T>> T max(T a, T b)
+    {
+        if (a.compareTo(b) >= 0)
         {
             return a;
         }

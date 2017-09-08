@@ -5,6 +5,7 @@ import com.lmax.utan.collection.Strings;
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.OpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -31,6 +32,11 @@ public class PersistentStore
                 throw new RuntimeException(e);
             }
         });
+
+    static File getKeyDir(File parent, CharSequence key, boolean createIfNotExists) throws IOException
+    {
+        return getKeyDir(parent, key.toString().getBytes(StandardCharsets.UTF_8), createIfNotExists);
+    }
 
     static File getKeyDir(File parent, byte[] keyAsBytes, boolean createIfNotExists) throws IOException
     {

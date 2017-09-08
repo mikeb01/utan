@@ -55,6 +55,19 @@ public class PersistentStoreReaderTest
         assertBlockSame(1472960849927L, 1475040629466L);
     }
 
+    @Test
+    public void shouldDetermineIfKeyExists() throws Exception
+    {
+        assertThat(reader.exists(key)).isTrue();
+        assertThat(reader.exists("is.doesnt.exist")).isFalse();
+    }
+
+    @Test
+    public void shouldGetLastTimestamp() throws Exception
+    {
+        assertThat(reader.lastTimestamp(key)).isEqualTo(blocks.lastKey());
+    }
+
     private void assertBlockSame(long startTimestamp, long endTimestamp) throws IOException
     {
         final List<Block> expected = new ArrayList<>();
