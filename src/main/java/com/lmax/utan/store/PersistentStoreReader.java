@@ -9,7 +9,6 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
-import java.security.spec.PSSParameterSpec;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
@@ -52,42 +51,16 @@ public class PersistentStoreReader
 
     private static File nextDir(File timeDir)
     {
-        File nextDay = Dirs.nextSibling(timeDir, VALID_DAYS::contains);
+        return Dirs.nextSibling(
+            timeDir,
+            candidate -> timeDir.getParent().compareTo(candidate) < 0 && PersistentStore.isTimeDir(candidate));
+    }
 
-        if (null != nextDay)
-        {
-            return nextDay;
-        }
-
-        final File monthDir = timeDir.getParentFile();
-        File nextMonth = Dirs.nextSibling(monthDir, VALID_MONTHS::contains);
-
-        if (null != nextMonth)
-        {
-            nextDay = Dirs.firstInDir(nextMonth, VALID_DAYS::contains);
-            if (null != nextDay)
-            {
-                return nextDay;
-            }
-        }
-
-        final File yearDir = monthDir.getParentFile();
-        final File nextYear = Dirs.nextSibling(yearDir, VALID_YEARS::contains);
-
-        if (null != nextYear)
-        {
-            nextMonth = Dirs.firstInDir(nextYear, VALID_MONTHS::contains);
-            if (null != nextMonth)
-            {
-                nextDay = Dirs.firstInDir(nextMonth, VALID_DAYS::contains);
-                if (null != nextDay)
-                {
-                    return nextDay;
-                }
-            }
-        }
-
-        return null;
+    private static File prevDir(File timeDir)
+    {
+        return Dirs.prevSibling(
+            timeDir,
+            candidate -> candidate.compareTo(timeDir.getName()) < 0 && PersistentStore.isTimeDir(candidate));
     }
 
     private void readHeader(final BlockHeader blockHeader, final FileChannel timeSeries, final long currentPosition) throws IOException
@@ -206,17 +179,30 @@ public class PersistentStoreReader
     public long lastTimestamp(final String key) throws IOException
     {
         final File keyDir = PersistentStore.getKeyDir(dir, key, false);
+        if (null == keyDir)
+        {
+            return -1;
+        }
 
-        final File lastYear = Dirs.lastInDir(keyDir, VALID_YEARS::contains);
-        final File lastMonth = Dirs.lastInDir(lastYear, VALID_MONTHS::contains);
-        final File lastDay = Dirs.lastInDir(lastMonth, VALID_DAYS::contains);
+        final File timeDir = Dirs.lastInDir(keyDir, PersistentStore::isTimeDir);
+        if (null == timeDir)
+        {
+            return -1;
+        }
 
-        final FileChannel timeSeriesChannel = PersistentStore.getTimeSeriesChannel(lastDay, READ_ONLY_OPTIONS);
+        try (final FileChannel timeSeriesChannel = PersistentStore.getTimeSeriesChannel(timeDir, READ_ONLY_OPTIONS))
+        {
+            if (timeSeriesChannel.size() < Block.BYTE_LENGTH)
+            {
+                prevDir(timeDir);
+            }
 
-        BlockHeader header = BlockHeader.allocateDirect();
-        readHeader(header, timeSeriesChannel, timeSeriesChannel.size() - Block.BYTE_LENGTH);
+            final BlockHeader header = BlockHeader.allocateDirect();
 
-        return header.lastTimestamp();
+            readHeader(header, timeSeriesChannel, timeSeriesChannel.size() - Block.BYTE_LENGTH);
+
+            return header.lastTimestamp();
+        }
     }
 
     private class BlockCursor implements Cursor<Block>

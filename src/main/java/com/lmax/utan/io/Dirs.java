@@ -7,9 +7,6 @@ import java.io.IOException;
 import java.util.UUID;
 import java.util.function.Predicate;
 
-
-import static java.lang.Math.max;
-
 public class Dirs
 {
     public static File createTempDir(String prefix)
@@ -56,6 +53,19 @@ public class Dirs
         }
 
         return min(laterSiblings);
+    }
+
+    public static File prevSibling(File f, Predicate<String> namePredicate)
+    {
+        File parent = f.getParentFile();
+
+        File[] laterSiblings = parent.listFiles(pathname -> namePredicate.test(pathname.getName()) && f.compareTo(pathname) < 0);
+        if (null == laterSiblings)
+        {
+            return null;
+        }
+
+        return max(laterSiblings);
     }
 
     public static File firstInDir(File parent, Predicate<String> namePredicate)

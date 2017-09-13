@@ -1,7 +1,5 @@
 package com.lmax.utan.store;
 
-import com.lmax.utan.collection.Strings;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -13,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import static com.lmax.utan.io.Dirs.ensureDirExists;
 import static java.lang.ThreadLocal.withInitial;
@@ -66,22 +65,30 @@ public class PersistentStore
 
     static File getTimeDir(File keyDir, long timestamp, boolean createIfNotExists) throws IOException
     {
-        final LocalDate date = Instant.ofEpochMilli(timestamp).atOffset(ZoneOffset.UTC).toLocalDate();
-        return getTimeDir(keyDir, date, createIfNotExists);
-    }
-
-    private static File getTimeDir(File keyDir, LocalDate dateTime, boolean createIfNotExists) throws IOException
-    {
-        String year = String.valueOf(dateTime.getYear());
-        String month = Strings.lPad2(dateTime.getMonth().getValue());
-        String day = Strings.lPad2(dateTime.getDayOfMonth());
-
-        File timePath = keyDir.toPath().resolve(year).resolve(month).resolve(day).toFile();
+        File timePath = keyDir.toPath().resolve(formatAsDate(timestamp)).toFile();
         if (createIfNotExists)
         {
             ensureDirExists(timePath);
         }
 
         return timePath;
+    }
+
+    private static String formatAsDate(long timestamp)
+    {
+        final LocalDate date = Instant.ofEpochMilli(timestamp).atOffset(ZoneOffset.UTC).toLocalDate();
+        final int year = date.getYear();
+        final int monthOfYear = date.getMonthValue();
+        final int dayOfMonth = date.getDayOfMonth();
+
+        return String.valueOf(year) + '-' +
+        (monthOfYear < 10 ? "0" : "") + monthOfYear + '-' +
+        (dayOfMonth < 10 ? "0" : "") + dayOfMonth;
+    }
+
+    private static final Pattern DATE_PATTERN = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
+    static boolean isTimeDir(String s)
+    {
+        return DATE_PATTERN.matcher(s).matches();
     }
 }
